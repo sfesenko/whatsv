@@ -1,0 +1,10 @@
+[Desktop Entry]
+Name=whatsv
+Exec=whatsv
+Icon=com.github.sfesenko.whatsv
+Terminal=false
+Type=Application
+Categories=Utility;
+Keywords=GTK;
+StartupNotify=true
+DBusActivatable=true
