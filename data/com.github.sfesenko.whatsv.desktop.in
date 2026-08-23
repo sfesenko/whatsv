@@ -2,7 +2,7 @@
 Name=WhatsV
 GenericName=WhatsApp Web Client
 Comment=Simple Vala WhatsApp Web Client
-Exec=whatsv
+Exec=whatsv %U
 Icon=com.github.sfesenko.whatsv
 Terminal=false
 Type=Application

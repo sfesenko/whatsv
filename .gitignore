@@ -4,3 +4,8 @@ build/
 .tmp/
 *.gmo
 *.mo
+*.pkg.tar.*
+*.pkg.tar.zst
+misc/whatsv-git/
+misc/pkg/
+misc/src/
