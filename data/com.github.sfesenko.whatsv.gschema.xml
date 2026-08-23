@@ -1,5 +1,28 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <schemalist gettext-domain="whatsv">
-	<schema id="com.github.sfesenko.whatsv" path="/com/github/sfesenko/whatsv/">
-	</schema>
+  <schema id="com.github.sfesenko.whatsv" path="/com/github/sfesenko/whatsv/">
+    <key name="window-width" type="i">
+      <default>1200</default>
+      <summary>Window width</summary>
+      <description>Default width of the main window</description>
+      <range min="600" max="4096"/>
+    </key>
+    <key name="window-height" type="i">
+      <default>800</default>
+      <summary>Window height</summary>
+      <description>Default height of the main window</description>
+      <range min="400" max="4096"/>
+    </key>
+    <key name="window-maximized" type="b">
+      <default>false</default>
+      <summary>Window maximized</summary>
+      <description>Whether the window is maximized</description>
+    </key>
+    <key name="zoom-level" type="d">
+      <default>1.0</default>
+      <summary>Zoom level</summary>
+      <description>Default zoom level for the WebView</description>
+      <range min="0.3" max="3.0"/>
+    </key>
+  </schema>
 </schemalist>

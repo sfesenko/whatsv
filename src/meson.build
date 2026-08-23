@@ -5,8 +5,8 @@ whatsv_sources = [
 
 whatsv_dependencies = [
   config_dep,
-  dependency('gtk4'),
-  dependency('webkitgtk-6.0')
+  dependency('gtk4', version: '>= 4.12'),
+  dependency('webkitgtk-6.0', version: '>= 2.42')
 ]
 
 whatsv_sources += gnome.compile_resources('whatsv-resources',
