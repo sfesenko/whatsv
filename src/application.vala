@@ -32,12 +32,21 @@ public class Whatsv.Window : Gtk.ApplicationWindow {
     // Keep session alive for lifetime of window
     private WebKit.NetworkSession? network_session = null;
     private static GLib.HashTable<string, WebKit.NetworkSession>? sessions = null;
+    private GLib.Settings app_settings;
 
     public Window (Gtk.Application app, string profile = "default") {
         Object (application: app, profile: profile);
     }
 
     construct {
+        // GSettings for window geometry / zoom (wired to gschema keys)
+        app_settings = new GLib.Settings ("com.github.sfesenko.whatsv");
+        int sw = app_settings.get_int ("window-width");
+        int sh = app_settings.get_int ("window-height");
+        bool smax = app_settings.get_boolean ("window-maximized");
+        this.set_default_size (sw, sh);
+        if (smax) this.maximize ();
+
         // Resolve help overlay from gresource so win.show-help-overlay works
         try {
             var builder = new Gtk.Builder.from_resource ("/com/github/sfesenko/whatsv/gtk/help-overlay.ui");
@@ -48,6 +57,9 @@ public class Whatsv.Window : Gtk.ApplicationWindow {
         } catch (Error e) {
             warning ("Failed to load help overlay: %s", e.message);
         }
+
+        // Persist geometry / zoom on close
+        this.close_request.connect (on_close_request);
 
         // Window-level actions (PaperWM/GNOME safe: avoid Super, use Ctrl/Alt local)
         ActionEntry[] win_entries = {
@@ -117,20 +129,23 @@ public class Whatsv.Window : Gtk.ApplicationWindow {
             // placeholder for spinner
         });
 
-        // Downloads: delegate to default handler via NetworkSession signal
+        // Downloads: use XDG Downloads folder
         if (this.network_session != null) {
             this.network_session.download_started.connect ((dl) => {
-                // Let WebKit handle download destination via Download::decide-destination
-                // Use Downloads folder as default
                 dl.decide_destination.connect ((suggested) => {
                     var downloads = Environment.get_user_special_dir (UserDirectory.DOWNLOAD);
                     if (downloads == null) downloads = Environment.get_home_dir ();
                     var dest = Path.build_filename (downloads, suggested);
                     dl.set_destination (dest);
-                    return false;
+                    return true;
                 });
-                // Show notification or log
                 message ("Download started: %s", dl.get_request ().get_uri ());
+                dl.failed.connect ((err) => {
+                    warning ("Download failed: %s", err.message);
+                });
+                dl.finished.connect (() => {
+                    message ("Download finished: %s", dl.get_destination ());
+                });
             });
         }
 
@@ -142,8 +157,15 @@ public class Whatsv.Window : Gtk.ApplicationWindow {
             this.tooltip_text = "Profile: %s".printf (this.profile);
         }
 
-        // Zoom limits
-        view.zoom_level = 1.0;
+        // Restore zoom from GSettings (clamped to schema range)
+        double zlevel = app_settings.get_double ("zoom-level");
+        if (zlevel < 0.3) zlevel = 0.3;
+        if (zlevel > 3.0) zlevel = 3.0;
+        view.zoom_level = zlevel;
+        view.notify["zoom-level"].connect (() => {
+            // Persist zoom immediately (global for now, not per-profile)
+            app_settings.set_double ("zoom-level", view.zoom_level);
+        });
     }
 
     private static WebKit.NetworkSession get_or_create_session (string profile) {
@@ -254,6 +276,32 @@ public class Whatsv.Window : Gtk.ApplicationWindow {
 
     private void on_close_window () {
         this.close ();
+    }
+
+    private bool on_close_request () {
+        // Save window geometry only if not maximized/fullscreened
+        bool is_max = this.maximized;
+        bool is_full = this.fullscreened;
+        app_settings.set_boolean ("window-maximized", is_max || is_full);
+        if (!is_max && !is_full) {
+            int w, h;
+            this.get_default_size (out w, out h);
+            // get_default_size may return 0 if not set; fallback to allocation
+            if (w > 0 && h > 0) {
+                app_settings.set_int ("window-width", w);
+                app_settings.set_int ("window-height", h);
+            } else {
+                int cw = this.get_width ();
+                int ch = this.get_height ();
+                if (cw > 0 && ch > 0) {
+                    app_settings.set_int ("window-width", cw);
+                    app_settings.set_int ("window-height", ch);
+                }
+            }
+        }
+        // zoom already saved via notify, but ensure final value
+        app_settings.set_double ("zoom-level", view.zoom_level);
+        return false; // propagate, allow close
     }
 
     // --- WebKit signals ---
