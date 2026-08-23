@@ -1,0 +1,6 @@
+_build/
+build/
+.build/
+.tmp/
+*.gmo
+*.mo

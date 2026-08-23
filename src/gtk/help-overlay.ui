@@ -5,20 +5,88 @@
     <child>
       <object class="GtkShortcutsSection">
         <property name="section-name">shortcuts</property>
-        <property name="max-height">10</property>
+        <property name="max-height">12</property>
         <child>
           <object class="GtkShortcutsGroup">
             <property name="title" translatable="yes" context="shortcut window">General</property>
             <child>
               <object class="GtkShortcutsShortcut">
                 <property name="title" translatable="yes" context="shortcut window">Show Shortcuts</property>
+                <property name="accelerator">F1</property>
                 <property name="action-name">win.show-help-overlay</property>
               </object>
             </child>
             <child>
               <object class="GtkShortcutsShortcut">
                 <property name="title" translatable="yes" context="shortcut window">Quit</property>
+                <property name="accelerator">&lt;Primary&gt;q</property>
                 <property name="action-name">app.quit</property>
+              </object>
+            </child>
+            <child>
+              <object class="GtkShortcutsShortcut">
+                <property name="title" translatable="yes" context="shortcut window">Close Window</property>
+                <property name="accelerator">&lt;Primary&gt;w</property>
+                <property name="action-name">win.close-window</property>
+              </object>
+            </child>
+          </object>
+        </child>
+        <child>
+          <object class="GtkShortcutsGroup">
+            <property name="title" translatable="yes" context="shortcut window">Browsing</property>
+            <child>
+              <object class="GtkShortcutsShortcut">
+                <property name="title" translatable="yes" context="shortcut window">Reload</property>
+                <property name="accelerator">&lt;Primary&gt;r F5</property>
+                <property name="action-name">win.reload</property>
+              </object>
+            </child>
+            <child>
+              <object class="GtkShortcutsShortcut">
+                <property name="title" translatable="yes" context="shortcut window">Reload (Bypass Cache)</property>
+                <property name="accelerator">&lt;Primary&gt;&lt;Shift&gt;r</property>
+                <property name="action-name">win.reload-bypass-cache</property>
+              </object>
+            </child>
+            <child>
+              <object class="GtkShortcutsShortcut">
+                <property name="title" translatable="yes" context="shortcut window">Go Back</property>
+                <property name="accelerator">&lt;Alt&gt;Left &lt;Primary&gt;bracketleft</property>
+                <property name="action-name">win.go-back</property>
+              </object>
+            </child>
+            <child>
+              <object class="GtkShortcutsShortcut">
+                <property name="title" translatable="yes" context="shortcut window">Go Forward</property>
+                <property name="accelerator">&lt;Alt&gt;Right &lt;Primary&gt;bracketright</property>
+                <property name="action-name">win.go-forward</property>
+              </object>
+            </child>
+          </object>
+        </child>
+        <child>
+          <object class="GtkShortcutsGroup">
+            <property name="title" translatable="yes" context="shortcut window">Zoom</property>
+            <child>
+              <object class="GtkShortcutsShortcut">
+                <property name="title" translatable="yes" context="shortcut window">Zoom In</property>
+                <property name="accelerator">&lt;Primary&gt;plus &lt;Primary&gt;equal</property>
+                <property name="action-name">win.zoom-in</property>
+              </object>
+            </child>
+            <child>
+              <object class="GtkShortcutsShortcut">
+                <property name="title" translatable="yes" context="shortcut window">Zoom Out</property>
+                <property name="accelerator">&lt;Primary&gt;minus</property>
+                <property name="action-name">win.zoom-out</property>
+              </object>
+            </child>
+            <child>
+              <object class="GtkShortcutsShortcut">
+                <property name="title" translatable="yes" context="shortcut window">Zoom Reset</property>
+                <property name="accelerator">&lt;Primary&gt;0</property>
+                <property name="action-name">win.zoom-reset</property>
               </object>
             </child>
           </object>

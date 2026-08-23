@@ -1,11 +1,13 @@
 [Desktop Entry]
-Name=whatsv
-Comment=Simple Vala WhatsApp Web Client 
+Name=WhatsV
+GenericName=WhatsApp Web Client
+Comment=Simple Vala WhatsApp Web Client
 Exec=whatsv
 Icon=com.github.sfesenko.whatsv
 Terminal=false
 Type=Application
-Categories=Network;Office;InstantMessaging;
-Keywords=GTK;
+Categories=Network;InstantMessaging;
+Keywords=WhatsApp;Chat;Messaging;WebApp;GTK;
 StartupNotify=true
+StartupWMClass=com.github.sfesenko.whatsv
 DBusActivatable=true
