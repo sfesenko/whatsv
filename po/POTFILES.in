@@ -3,6 +3,7 @@
 data/com.github.sfesenko.whatsv.desktop.in
 data/com.github.sfesenko.whatsv.metainfo.xml.in
 data/com.github.sfesenko.whatsv.gschema.xml
+src/gtk/help-overlay.ui
 src/main.vala
 src/application.vala
 src/window.ui

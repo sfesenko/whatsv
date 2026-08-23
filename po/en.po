@@ -1,0 +1,12 @@
+# Translation for whatsv
+# Copyright (C) 2025 Sergii Fesenko
+# This file is distributed under the same license as the whatsv package.
+msgid ""
+msgstr ""
+"Project-Id-Version: whatsv 0.1.0\n"
+"Report-Msgid-Bugs-To: https://github.com/sfesenko/whatsv/issues\n"
+"POT-Creation-Date: 2025-08-24\n"
+"MIME-Version: 1.0\n"
+"Content-Type: text/plain; charset=UTF-8\n"
+"Content-Transfer-Encoding: 8bit\n"
+"Language: en\n"
