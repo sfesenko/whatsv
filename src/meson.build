@@ -1,6 +1,7 @@
 whatsv_sources = [
   'main.vala',
   'application.vala',
+  'utils.vala',
 ]
 
 whatsv_dependencies = [

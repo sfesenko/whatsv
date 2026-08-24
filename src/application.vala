@@ -151,46 +151,14 @@ public class Whatsv.Window : Gtk.ApplicationWindow {
             app_settings.set_double ("zoom-level", view.zoom_level);
         });
 
-        // Downloads: use XDG Downloads folder, sanitized
+        // Downloads: use XDG Downloads folder, sanitized via Utils
         if (this.network_session != null) {
             this.network_session.download_started.connect ((dl) => {
                 dl.decide_destination.connect ((suggested) => {
                     var downloads = Environment.get_user_special_dir (UserDirectory.DOWNLOAD);
                     if (downloads == null) downloads = Environment.get_home_dir ();
-                    // Sanitize: basename, strip path traversal, replace unsafe chars, avoid overwrite
-                    var base_name = Path.get_basename (suggested);
-                    if (base_name == null || base_name.strip () == "" || base_name == "." || base_name == "..") {
-                        base_name = "download";
-                    }
-                    // Replace path separators and control chars, whitelist safe chars
-                    try {
-                        var regex = new Regex ("[^A-Za-z0-9._-]");
-                        base_name = regex.replace (base_name, -1, 0, "_");
-                    } catch (Error e) {
-                        base_name = base_name.replace ("/", "_").replace ("\\", "_");
-                    }
-                    if (base_name.length > 255) base_name = base_name.substring (0, 255);
-                    var dest = Path.build_filename (downloads, base_name);
-                    // Avoid overwrite: append (1), (2) ...
-                    var file = File.new_for_path (dest);
-                    int n = 1;
-                    while (file.query_exists ()) {
-                        var name = base_name;
-                        var dot = name.last_index_of_char ('.');
-                        string stem;
-                        string ext = "";
-                        if (dot > 0) {
-                            stem = name.substring (0, dot);
-                            ext = name.substring (dot);
-                        } else {
-                            stem = name;
-                        }
-                        var candidate = "%s (%d)%s".printf (stem, n, ext);
-                        dest = Path.build_filename (downloads, candidate);
-                        file = File.new_for_path (dest);
-                        n++;
-                        if (n > 100) break;
-                    }
+                    var base_name = Whatsv.Utils.sanitize_download_filename (suggested);
+                    var dest = Whatsv.Utils.deduplicate_download_path (downloads, base_name);
                     dl.set_destination (dest);
                     dl.set_allow_overwrite (false);
                     return true;
@@ -399,33 +367,11 @@ public class Whatsv.Window : Gtk.ApplicationWindow {
     }
 
     private bool is_main_whatsapp_uri (string uri) {
-        try {
-            var guri = GLib.Uri.parse (uri, GLib.UriFlags.NONE);
-            var host = guri.get_host ();
-            if (host == null) return false;
-            return host.down () == "web.whatsapp.com";
-        } catch (Error e) {
-            return uri.has_prefix ("https://web.whatsapp.com");
-        }
+        return Whatsv.Utils.is_main_whatsapp_uri (uri);
     }
 
     private bool is_whatsapp_uri (string uri) {
-        try {
-            var guri = GLib.Uri.parse (uri, GLib.UriFlags.NONE);
-            var host = guri.get_host ();
-            if (host == null) return false;
-            host = host.down ();
-            return host == "web.whatsapp.com"
-                || host == "whatsapp.com"
-                || host == "whatsapp.net"
-                || host.has_suffix (".whatsapp.com")
-                || host.has_suffix (".whatsapp.net")
-                || host.has_suffix (".fbcdn.net")
-                || host.has_suffix (".facebook.com")
-                || host == "flows.whatsapp.net";
-        } catch (Error e) {
-            return uri.contains ("whatsapp.com") || uri.contains ("whatsapp.net") || uri.contains ("fbcdn.net");
-        }
+        return Whatsv.Utils.is_whatsapp_uri (uri);
     }
 
     private bool on_decide_policy (WebKit.PolicyDecision decision, WebKit.PolicyDecisionType type) {
