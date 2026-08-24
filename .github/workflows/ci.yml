@@ -1,0 +1,50 @@
+name: CI
+
+on:
+  push:
+    branches: [ master, main ]
+  pull_request:
+  workflow_dispatch:
+    inputs:
+      branch:
+        description: 'Branch to run CI on (e.g. master, feature/xyz)'
+        required: false
+        default: ''
+        type: string
+      ref:
+        description: 'Git ref (branch/tag/SHA) — overrides branch if set'
+        required: false
+        default: ''
+        type: string
+
+jobs:
+  build:
+    runs-on: ubuntu-24.04
+    steps:
+      - name: Select ref
+        run: echo "Requested branch=${{ inputs.branch }} ref=${{ inputs.ref }} github.ref=${{ github.ref }}"
+
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ inputs.ref || inputs.branch || github.ref }}
+
+      - name: Install dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y \
+            meson ninja-build valac \
+            libgtk-4-dev libwebkitgtk-6.0-dev \
+            libglib2.0-dev gettext \
+            desktop-file-utils appstream
+
+      - name: Setup
+        run: meson setup build --prefix=/usr
+
+      - name: Compile
+        run: meson compile -C build
+
+      - name: Test
+        run: meson test -C build --print-errorlogs --verbose
+
+      - name: Install (DESTDIR)
+        run: DESTDIR=/tmp/dest meson install -C build
