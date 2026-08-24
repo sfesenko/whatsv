@@ -1,5 +1,5 @@
 # WhatsV
-Simple Vala WhatsApp Web Client, inspired by [WhatsTux](https://gitlab.com/nexxontech/whatstux)
+Simple GTK WhatsApp Web Client, inspired by [WhatsTux](https://gitlab.com/nexxontech/whatstux)
 
 GTK 4 + WebKitGTK 6.0 wrapper for https://web.whatsapp.com with persistent sessions and profiles.
 
