@@ -28,6 +28,11 @@ subdir('src')
 subdir('po')
 subdir('tests')
 
+# Version bump helpers: meson compile -C build bump-patch / bump-minor / bump-major
+run_target('bump-patch', command: [find_program('python3'), files('scripts/bump.py'), '--patch'])
+run_target('bump-minor', command: [find_program('python3'), files('scripts/bump.py'), '--minor'])
+run_target('bump-major', command: [find_program('python3'), files('scripts/bump.py'), '--major'])
+
 gnome.post_install(
      glib_compile_schemas: true,
     gtk_update_icon_cache: true,
