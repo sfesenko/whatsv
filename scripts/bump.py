@@ -119,8 +119,11 @@ def main():
         subprocess.run(["git", "tag", f"v{new}"], check=True)
         print(f"tagged v{new}")
         if args.push:
-            subprocess.run(["git", "push", "origin", "HEAD", "--tags"], check=True)
-            print("pushed")
+            # Push branch (triggers CI) and the new tag (triggers Release) separately.
+            # Using --follow-tags would also work, but explicit is clearer and avoids pushing all tags.
+            subprocess.run(["git", "push", "origin", "HEAD"], check=True)
+            subprocess.run(["git", "push", "origin", f"v{new}"], check=True)
+            print("pushed branch and tag v{new} (CI on master, Release on tag)".format(new=new))
 
 if __name__ == "__main__":
     main()
