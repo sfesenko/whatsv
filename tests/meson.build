@@ -14,6 +14,6 @@ test_whatsv = executable('test_whatsv',
   install: false,
 )
 
-test('unit: Whatsv.Utils', test_whatsv,
+test('unit_whatsv_utils', test_whatsv,
   protocol: 'tap',
 )

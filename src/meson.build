@@ -19,5 +19,4 @@ executable('whatsv', whatsv_sources,
   dependencies: whatsv_dependencies,
   include_directories: config_inc,
        install: true,
-       gui_app: true,
 )

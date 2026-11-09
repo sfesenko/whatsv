@@ -195,7 +195,7 @@ public class Whatsv.Window : Gtk.ApplicationWindow {
 
         string data_dir;
         string cache_dir;
-        get_dirs_for_profile (profile, out data_dir, out cache_dir);
+        Whatsv.Utils.get_dirs_for_profile (profile, out data_dir, out cache_dir);
 
         // Legacy migration check before creating modern dirs (otherwise cache_dir exists and check is dead)
         if (profile == "default") {
@@ -229,34 +229,6 @@ public class Whatsv.Window : Gtk.ApplicationWindow {
         return session;
     }
 
-    private static void get_dirs_for_profile (string profile, out string data_dir, out string cache_dir) {
-        var raw = profile.strip ();
-        if (raw == "" || raw == "." || raw == "..") raw = "default";
-        string safe;
-        try {
-            // Replace any char not in whitelist with _
-            var re = new Regex ("[^A-Za-z0-9._-]");
-            safe = re.replace (raw, -1, 0, "_");
-            // Avoid hidden files and traversal
-            while (safe.has_prefix (".")) safe = safe.substring (1);
-            if (safe == "" || safe == "." || safe == "..") safe = "default";
-            if (safe.length > 64) {
-                var hash = Checksum.compute_for_string (ChecksumType.SHA256, raw);
-                safe = safe.substring (0, 32) + "_" + hash.substring (0, 8);
-            }
-            var ws_re = new Regex ("^[A-Za-z0-9._-]+$");
-            if (!ws_re.match (safe)) {
-                safe = "profile_" + Checksum.compute_for_string (ChecksumType.SHA256, raw).substring (0, 12);
-            }
-        } catch (Error e) {
-            safe = "default";
-        }
-        var base_data = Path.build_filename (Environment.get_user_data_dir (), "com.github.sfesenko.whatsv", "profiles", safe);
-        var base_cache = Path.build_filename (Environment.get_user_cache_dir (), "com.github.sfesenko.whatsv", "profiles", safe);
-        data_dir = base_data;
-        cache_dir = base_cache;
-    }
-
     private static void ensure_dir (string path) {
         try {
             var f = File.new_for_path (path);
@@ -269,7 +241,7 @@ public class Whatsv.Window : Gtk.ApplicationWindow {
                 info.set_attribute_uint32 (FileAttribute.UNIX_MODE, 0700);
                 f.set_attributes_from_info (info, FileQueryInfoFlags.NONE);
             } catch (Error e) {
-                // Fallback: ignore, umask may have left 0755
+                warning ("Failed to set mode 0700 on %s: %s", path, e.message);
             }
         } catch (Error e) {
             warning ("Failed to create dir %s: %s", path, e.message);
@@ -448,6 +420,16 @@ public class Whatsv.Window : Gtk.ApplicationWindow {
                     decision.ignore ();
                     return true;
                 }
+            } else {
+                // Non-http(s) schemes: allow only benign in-page schemes
+                string low = uri.down ();
+                if (low.has_prefix ("about:") || low.has_prefix ("data:") || low.has_prefix ("blob:") || low.has_prefix ("webkit:")) {
+                    decision.use ();
+                    return true;
+                }
+                warning ("Ignoring navigation to unsupported scheme: %s", uri);
+                decision.ignore ();
+                return true;
             }
         } else if (type == WebKit.PolicyDecisionType.NEW_WINDOW_ACTION) {
             var nav = (WebKit.NavigationPolicyDecision) decision;
@@ -473,6 +455,15 @@ public class Whatsv.Window : Gtk.ApplicationWindow {
                 });
                 decision.ignore ();
                 return true;
+            } else {
+                string low = uri.down ();
+                if (low.has_prefix ("about:") || low.has_prefix ("data:") || low.has_prefix ("blob:") || low.has_prefix ("webkit:")) {
+                    decision.use ();
+                    return true;
+                }
+                warning ("Ignoring new-window navigation to unsupported scheme: %s", uri);
+                decision.ignore ();
+                return true;
             }
         }
         decision.use ();
@@ -481,6 +472,7 @@ public class Whatsv.Window : Gtk.ApplicationWindow {
 
     private bool on_load_failed (WebKit.LoadEvent event, string failing_uri, Error error) {
         warning ("Load failed %s: %s", failing_uri, error.message);
+        pending_user_reload = false;
         // Let WebKit show error page; return false to allow default handling
         return false;
     }
@@ -488,6 +480,7 @@ public class Whatsv.Window : Gtk.ApplicationWindow {
     private void on_load_changed (WebKit.LoadEvent event) {
         if (event == WebKit.LoadEvent.FINISHED) {
             last_load_finished = GLib.get_monotonic_time ();
+            pending_user_reload = false;
         }
     }
 }

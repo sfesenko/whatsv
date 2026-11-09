@@ -11,7 +11,8 @@ namespace Whatsv.Utils {
             if (host == null) return false;
             return host.down () == "web.whatsapp.com";
         } catch (Error e) {
-            return uri.has_prefix ("https://web.whatsapp.com");
+            string low = uri.down ();
+            return low.has_prefix ("https://web.whatsapp.com/") || low == "https://web.whatsapp.com";
         }
     }
 
@@ -30,7 +31,10 @@ namespace Whatsv.Utils {
                 || host.has_suffix (".facebook.com")
                 || host == "flows.whatsapp.net";
         } catch (Error e) {
-            return uri.contains ("whatsapp.com") || uri.contains ("whatsapp.net") || uri.contains ("fbcdn.net");
+            string low = uri.down ();
+            return low.has_prefix ("https://web.whatsapp.com")
+                || low.has_prefix ("https://whatsapp.com")
+                || low.has_prefix ("https://") && (low.contains (".whatsapp.com") || low.contains (".whatsapp.net") || low.contains (".fbcdn.net"));
         }
     }
 
