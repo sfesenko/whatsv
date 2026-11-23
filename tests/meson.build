@@ -24,9 +24,6 @@ test('site-config', python3,
   args: [
     files('check_site_config.py'),
     config_h,
-    app_id,
-    app_name,
-    site_start_url,
-    site_hosts,
+    site_path,
   ],
 )

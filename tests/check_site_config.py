@@ -1,5 +1,9 @@
 #!/usr/bin/env python3
-"""Check the constants generated from a site config file."""
+"""Check the constants generated from a site config file.
+
+The site config is parsed here independently of the Meson parser, so a
+parser defect cannot silently satisfy its own expectations.
+"""
 
 import re
 import sys
@@ -17,26 +21,46 @@ def read_quoted_defines(path):
     return defines
 
 
+def parse_site_config(path):
+    keys = {}
+    hosts = []
+    with open(path, encoding='utf-8') as site_file:
+        for line in site_file:
+            line = line.strip()
+            if not line or line.startswith('#'):
+                continue
+            key, _, value = line.partition('=')
+            key = key.strip()
+            value = value.strip()
+            if key == 'host':
+                hosts.append(value)
+            else:
+                keys[key] = value
+    return keys, hosts
+
+
 def main(argv):
-    if len(argv) != 6:
-        print(
-            'usage: check_site_config.py CONFIG_H APP_ID APP_NAME START_URL HOSTS',
-            file=sys.stderr,
-        )
+    if len(argv) != 3:
+        print('usage: check_site_config.py CONFIG_H SITE_CONF', file=sys.stderr)
         return 2
 
-    config_h, app_id, app_name, start_url, hosts = argv[1:]
+    config_h, site_conf = argv[1:]
     defines = read_quoted_defines(config_h)
-    # APP_EXEC and APP_ID_PATH are derived from the app id, so the check does
-    # not have to repeat them per site.
-    expected = {
-        'APP_ID': app_id,
-        'APP_NAME': app_name,
-        'SITE_START_URL': start_url,
-        'SITE_HOSTS': hosts,
-        'APP_EXEC': app_id.split('.')[-1],
-        'APP_ID_PATH': app_id.replace('.', '/'),
-    }
+    keys, hosts = parse_site_config(site_conf)
+
+    try:
+        app_id = keys['app_id']
+        expected = {
+            'APP_ID': app_id,
+            'APP_NAME': keys['app_name'],
+            'SITE_START_URL': keys['start_url'],
+            'SITE_HOSTS': ','.join(hosts),
+            'APP_EXEC': app_id.split('.')[-1],
+            'APP_ID_PATH': app_id.replace('.', '/'),
+        }
+    except KeyError as missing:
+        print(f'{missing}: required key missing from {site_conf}', file=sys.stderr)
+        return 1
 
     for key, value in expected.items():
         actual = defines.get(key)
