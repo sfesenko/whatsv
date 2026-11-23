@@ -26,6 +26,19 @@
 [GtkTemplate (ui = "/com/github/sfesenko/webapp/window.ui")]
 public class WebApp.Window : Gtk.ApplicationWindow {
 
+    // WebKit's feature API is newer than the Vala bindings in some distros.
+    [CCode (cname = "webkit_settings_get_all_features", cheader_filename = "webkit/webkit.h")]
+    private static extern void* webkit_settings_get_all_features ();
+
+    [CCode (cname = "webkit_feature_list_find", cheader_filename = "webkit/webkit.h")]
+    private static extern void* webkit_feature_list_find (void* list, string identifier);
+
+    [CCode (cname = "webkit_feature_list_unref", cheader_filename = "webkit/webkit.h")]
+    private static extern void webkit_feature_list_unref (void* list);
+
+    [CCode (cname = "webkit_settings_set_feature_enabled", cheader_filename = "webkit/webkit.h")]
+    private static extern void webkit_settings_set_feature_enabled (WebKit.Settings settings, void* feature, bool enabled);
+
     public string profile { get; construct; }
     public WebKit.WebView view { get; private set; }
 
@@ -84,6 +97,7 @@ public class WebApp.Window : Gtk.ApplicationWindow {
 
         // Harden / tweak settings
         var settings = view.get_settings () ?? new WebKit.Settings ();
+        enable_site_storage_features (settings);
         // Use Chrome-like UA for best compatibility with modern web apps
         settings.user_agent = "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/126.0.0.0 Safari/537.36";
         settings.enable_developer_extras = false;
@@ -185,6 +199,34 @@ public class WebApp.Window : Gtk.ApplicationWindow {
         }
 
         this.view.load_uri (Config.SITE_START_URL);
+    }
+
+    // Some web apps use the Origin Private File System (OPFS). WebKitGTK ships
+    // these features disabled by default, so navigator.storage is missing until
+    // the embedder turns them on.
+    private static void enable_site_storage_features (WebKit.Settings settings) {
+        string[] features = {
+            "FileSystem",
+            "FileSystemHandleSerialization",
+            "FileSystemWritableStream",
+            "AccessHandle",
+            "StorageAPI",
+            "StorageAPIEstimate",
+        };
+        void* list = webkit_settings_get_all_features ();
+        if (list == null) {
+            warning ("WebKit feature list unavailable; OPFS will be disabled");
+            return;
+        }
+        foreach (var identifier in features) {
+            void* feature = webkit_feature_list_find (list, identifier);
+            if (feature == null) {
+                warning ("WebKit feature %s is unavailable; site storage may be limited", identifier);
+                continue;
+            }
+            webkit_settings_set_feature_enabled (settings, feature, true);
+        }
+        webkit_feature_list_unref (list);
     }
 
     private static WebKit.NetworkSession get_or_create_session (string profile) {
