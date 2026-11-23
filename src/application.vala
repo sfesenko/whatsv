@@ -467,7 +467,6 @@ public class WebApp.Application : Gtk.Application {
             "version", Config.PACKAGE_VERSION,
             "copyright", "© 2025 Sergii Fesenko",
             "license-type", Gtk.License.MIT_X11,
-            "website", "https://github.com/sfesenko/whatsv",
             "comments", _("Simple %s web client").printf (Config.APP_NAME)
         );
     }

@@ -1,9 +1,9 @@
 # Maintainer: Sergii Fesenko <sergii_f@outlook.com>
 
-pkgname=whatsv-git
+pkgname=webapp-git
 pkgver=2026.08.24
 pkgrel=1
-pkgdesc="Simple GTK WhatsApp Web Client"
+pkgdesc="Generic GTK Web App wrapper (default: WhatsApp Web)"
 arch=('x86_64')
 url="https://github.com/sfesenko/whatsv"
 license=('MIT')
@@ -20,7 +20,11 @@ pkgver() {
 
 build() {
   cd "${srcdir}"
-  meson setup --prefix=/usr build "${pkgname}"
+  # A package for another site is a copy of this file with only pkgname and
+  # the -Dsite path changed, for example:
+  #   pkgname=webapp-other-git
+  #   meson setup --prefix=/usr build "${srcdir}/${pkgname}" -Dsite="${srcdir}/${pkgname}/sites/other.conf"
+  meson setup --prefix=/usr build "${srcdir}/${pkgname}" -Dsite="${srcdir}/${pkgname}/sites/whatsapp.conf"
   meson compile -C build
 }
 
