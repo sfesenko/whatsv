@@ -46,6 +46,7 @@ Blank lines and lines starting with `#` are ignored.
 | `data_dir` | no | Absolute path to a root directory for persistent profile data instead of `XDG_DATA_HOME`. `<data_dir>/<app_id>/profiles/<name>` is used. Relative values are not resolved; they are used verbatim and usually point outside the intended location. |
 | `cache_dir` | no | Absolute path to a root directory for profile caches instead of `XDG_CACHE_HOME`. `<cache_dir>/<app_id>/profiles/<name>` is used. Relative values are not resolved; they are used verbatim. |
 | `ephemeral` | no | `true` uses an ephemeral WebKit session: no profile data or credentials are written to disk. Defaults to `false`. |
+| `persist_cookies` | no | `true` stores cookies in `<data dir>/cookies.sqlite` so site logins survive restarts. `false` keeps cookies in memory for the current run only. Defaults to `true`. |
 
 Example:
 

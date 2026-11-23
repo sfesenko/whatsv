@@ -12,4 +12,5 @@ namespace Config {
     public const string DATA_DIR_ROOT;
     public const string CACHE_DIR_ROOT;
     public const bool EPHEMERAL;
+    public const bool PERSIST_COOKIES;
 }

@@ -30,6 +30,7 @@ known_keys = [
   'data_dir',
   'cache_dir',
   'ephemeral',
+  'persist_cookies',
 ]
 foreach line : fs.read(site_path).split('\n')
   line = line.strip()
@@ -134,6 +135,11 @@ if ephemeral_raw != 'true' and ephemeral_raw != 'false'
   error('Site config @0@: "ephemeral" must be "true" or "false", not "@1@"'.format(site_path, site.get('ephemeral')))
 endif
 ephemeral = ephemeral_raw == 'true'
+persist_cookies_raw = site.get('persist_cookies', 'true').strip().to_lower()
+if persist_cookies_raw != 'true' and persist_cookies_raw != 'false'
+  error('Site config @0@: "persist_cookies" must be "true" or "false", not "@1@"'.format(site_path, site.get('persist_cookies')))
+endif
+persist_cookies = persist_cookies_raw == 'true'
 
 config = configuration_data()
 config.set_quoted('PACKAGE_VERSION', meson.project_version ())
@@ -148,6 +154,7 @@ config.set_quoted('SITE_HOSTS', site_hosts)
 config.set_quoted('DATA_DIR_ROOT', data_dir_root)
 config.set_quoted('CACHE_DIR_ROOT', cache_dir_root)
 config.set('EPHEMERAL', ephemeral ? 'TRUE' : 'FALSE')
+config.set('PERSIST_COOKIES', persist_cookies ? 'TRUE' : 'FALSE')
 config_h = configure_file(output: 'config.h', configuration: config)
 
 config_dep = valac.find_library ('config', dirs: srcdir)

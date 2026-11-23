@@ -8,17 +8,25 @@ parser defect cannot silently satisfy its own expectations.
 import re
 import sys
 
-DEFINE_RE = re.compile(r'^#define\s+(\w+)\s+"(.*)"\s*$')
+DEFINE_RE = re.compile(r'^#define\s+(\w+)\s+(.*?)\s*$')
 
 
-def read_quoted_defines(path):
+def read_defines(path):
     defines = {}
     with open(path, encoding='utf-8') as config_h:
         for line in config_h:
             match = DEFINE_RE.match(line)
-            if match:
-                defines[match.group(1)] = match.group(2)
+            if not match:
+                continue
+            value = match.group(2)
+            if len(value) >= 2 and value[0] == '"' and value[-1] == '"':
+                value = value[1:-1]
+            defines[match.group(1)] = value
     return defines
+
+
+def bool_define(keys, key, default='true'):
+    return 'TRUE' if keys.get(key, default).strip().lower() == 'true' else 'FALSE'
 
 
 def parse_site_config(path):
@@ -45,7 +53,7 @@ def main(argv):
         return 2
 
     config_h, site_conf = argv[1:]
-    defines = read_quoted_defines(config_h)
+    defines = read_defines(config_h)
     keys, hosts = parse_site_config(site_conf)
 
     try:
@@ -57,6 +65,8 @@ def main(argv):
             'SITE_HOSTS': ','.join(hosts),
             'APP_EXEC': app_id.split('.')[-1],
             'APP_ID_PATH': app_id.replace('.', '/'),
+            'PERSIST_COOKIES': bool_define(keys, 'persist_cookies'),
+            'EPHEMERAL': bool_define(keys, 'ephemeral', 'false'),
         }
     except KeyError as missing:
         print(f'{missing}: required key missing from {site_conf}', file=sys.stderr)

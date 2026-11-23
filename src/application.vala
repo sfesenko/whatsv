@@ -252,9 +252,11 @@ public class WebApp.Window : Gtk.ApplicationWindow {
         var session = new WebKit.NetworkSession (data_dir, cache_dir);
         // NetworkSession does not persist cookies unless told to; without this,
         // site logins are lost every time the app restarts.
-        session.get_cookie_manager ().set_persistent_storage (
-            Path.build_filename (data_dir, "cookies.sqlite"),
-            WebKit.CookiePersistentStorage.SQLITE);
+        if (Config.PERSIST_COOKIES) {
+            session.get_cookie_manager ().set_persistent_storage (
+                Path.build_filename (data_dir, "cookies.sqlite"),
+                WebKit.CookiePersistentStorage.SQLITE);
+        }
         // Persist credentials (HSTS etc) and ITP off for messaging
         session.set_persistent_credential_storage_enabled (true);
         // ITP can break single-page apps; disable
