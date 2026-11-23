@@ -107,6 +107,12 @@ public class WebApp.Window : Gtk.ApplicationWindow {
         view.create.connect ((nav_action) => {
             var uri = nav_action.get_request ().get_uri ();
             if (uri == null) return (Gtk.Widget?) null;
+            // window.open("about:blank") and data:/blob: popups must not
+            // replace the main view with a blank page.
+            if (WebApp.Utils.is_benign_scheme (uri)) {
+                warning ("Ignoring create for benign scheme %s", uri);
+                return (Gtk.Widget?) null;
+            }
             switch (WebApp.Utils.decide_navigation (uri, Config.SITE_HOSTS, false, true)) {
                 case WebApp.Utils.NavigationDisposition.IN_VIEW:
                     view.load_uri (uri);

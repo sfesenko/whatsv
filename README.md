@@ -40,11 +40,11 @@ Blank lines and lines starting with `#` are ignored.
 | `app_id` | yes | Reverse-DNS application ID. Drives the desktop file, D-Bus service, GSchema, icon names, storage directory and the installed executable name (its last segment). |
 | `app_name` | yes | Human-readable name shown in the window, desktop entry and About dialog. |
 | `start_url` | yes | URL loaded when the app starts. |
-| `host` | yes, repeatable | Host allowed for navigation and privileged permissions. Repeat the key once per host; a leading dot matches subdomains (`.example.com`). At least one is required. |
+| `host` | yes, repeatable | Host allowed for navigation and privileged permissions. Repeat the key once per host. An entry matches the host itself and every subdomain; a leading dot is stripped, so `example.com` and `.example.com` are equivalent. At least one is required, and the `start_url` host must be covered by one of the entries. |
 | `icon` | yes | Path to a full-color SVG icon, relative to the source root or absolute. Must exist at configure time. |
 | `icon_symbolic` | yes | Path to a symbolic SVG icon, relative to the source root or absolute. Must exist at configure time. |
-| `data_dir` | no | Root directory for persistent profile data instead of `XDG_DATA_HOME`. `<data_dir>/<app_id>/profiles/<name>` is used. |
-| `cache_dir` | no | Root directory for profile caches instead of `XDG_CACHE_HOME`. `<cache_dir>/<app_id>/profiles/<name>` is used. |
+| `data_dir` | no | Absolute path to a root directory for persistent profile data instead of `XDG_DATA_HOME`. `<data_dir>/<app_id>/profiles/<name>` is used. Relative values are not resolved; they are used verbatim and usually point outside the intended location. |
+| `cache_dir` | no | Absolute path to a root directory for profile caches instead of `XDG_CACHE_HOME`. `<cache_dir>/<app_id>/profiles/<name>` is used. Relative values are not resolved; they are used verbatim. |
 | `ephemeral` | no | `true` uses an ephemeral WebKit session: no profile data or credentials are written to disk. Defaults to `false`. |
 
 Example:
@@ -54,7 +54,9 @@ app_id=com.example.myapp
 app_name=My App
 start_url=https://example.com/
 host=example.com
-host=.example.com
+# Replace these with paths to SVG files that exist in your tree (relative to
+# the source root) or absolute paths. The values below are placeholders and
+# `meson setup` fails while the files are missing.
 icon=icons/example.svg
 icon_symbolic=icons/example-symbolic.svg
 ```
