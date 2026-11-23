@@ -15,7 +15,7 @@ webapp_sources += gnome.compile_resources('webapp-resources',
   c_name: 'webapp'
 )
 
-executable('whatsv', webapp_sources,
+executable(app_exec, webapp_sources,
   dependencies: webapp_dependencies,
   include_directories: config_inc,
        install: true,

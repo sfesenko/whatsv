@@ -22,6 +22,7 @@ test('no-hardcoded-site', find_program('bash'),
   args: [
     files('check_no_hardcoded_site.sh'),
     meson.project_source_root() / 'src/application.vala',
+    meson.project_source_root() / 'src/window.ui',
   ],
 )
 

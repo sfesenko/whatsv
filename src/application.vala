@@ -39,6 +39,9 @@ public class WebApp.Window : Gtk.ApplicationWindow {
     }
 
     construct {
+        // Show the configured app name until the page title arrives
+        this.title = Config.APP_NAME;
+
         // GSettings for window geometry / zoom (wired to gschema keys)
         app_settings = new GLib.Settings (Config.APP_ID);
         int sw = app_settings.get_int ("window-width");

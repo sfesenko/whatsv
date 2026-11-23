@@ -12,7 +12,7 @@ import argparse, re, sys, datetime, pathlib, subprocess
 
 ROOT = pathlib.Path(__file__).resolve().parents[1]
 MESON = ROOT / "meson.build"
-METAINFO = ROOT / "data/com.github.sfesenko.whatsv.metainfo.xml.in"
+METAINFO = ROOT / "data/app.metainfo.xml.in"
 
 def parse_version(v: str):
     m = re.match(r"^(\d+)\.(\d+)\.(\d+)$", v.strip())
@@ -52,7 +52,7 @@ def bump_version(cur: str, args):
 def update_meson(old: str, new: str):
     txt = MESON.read_text()
     # Only replace the project version, not meson_version
-    # project('whatsv', ..., version: '0.1.0',
+    # project('webapp', ..., version: '0.1.0',
     if f"version: '{old}'" not in txt:
         sys.exit(f"cannot find version: '{old}' in meson.build")
     txt = txt.replace(f"version: '{old}'", f"version: '{new}'", 1)
@@ -93,8 +93,8 @@ def main():
     if args.push:
         args.tag = True
     mtxt = MESON.read_text()
-    # Find project version specifically: project('whatsv', ... version: 'X.Y.Z'
-    m = re.search(r"project\s*\(\s*'whatsv'.*?version\s*:\s*'([^']+)'", mtxt, re.DOTALL)
+    # Find project version specifically: project('webapp', ... version: 'X.Y.Z'
+    m = re.search(r"project\s*\(\s*'webapp'.*?version\s*:\s*'([^']+)'", mtxt, re.DOTALL)
     if not m:
         sys.exit("cannot parse version from meson.build")
     cur = m.group(1)
@@ -112,7 +112,7 @@ def main():
     update_meson(cur, new)
     update_metainfo(cur, new)
     print(f"bumped {cur} -> {new}")
-    print(f"next: git add meson.build data/com.github.sfesenko.whatsv.metainfo.xml.in && git commit -m \"release: v{new}\" && git tag v{new}")
+    print(f"next: git add meson.build data/app.metainfo.xml.in && git commit -m \"release: v{new}\" && git tag v{new}")
     if args.tag:
         subprocess.run(["git", "add", str(MESON), str(METAINFO)], check=True)
         subprocess.run(["git", "commit", "-m", f"release: v{new}"], check=True)

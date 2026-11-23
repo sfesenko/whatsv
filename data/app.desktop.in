@@ -1,0 +1,13 @@
+[Desktop Entry]
+Name=@APP_NAME@
+GenericName=Web App
+Comment=Run a website in its own window
+Exec=@APP_EXEC@ %U
+Icon=@APP_ID@
+Terminal=false
+Type=Application
+Categories=Network;
+Keywords=WebApp;GTK;
+StartupNotify=true
+StartupWMClass=@APP_ID@
+DBusActivatable=true

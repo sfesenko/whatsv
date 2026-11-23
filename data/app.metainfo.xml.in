@@ -1,0 +1,40 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<component type="desktop-application">
+  <id>@APP_ID@</id>
+  <metadata_license>CC0-1.0</metadata_license>
+  <project_license>MIT</project_license>
+
+  <name>@APP_NAME@</name>
+  <summary>Run a website in its own desktop window</summary>
+  <description>
+    <p>GTK 4 and WebKitGTK client that wraps a configured website in a native window with persistent sessions, profiles and native hotkeys.</p>
+    <p>Features: single-instance, per-profile isolated sessions (XDG data/cache), hardened WebKit settings, system notifications and download handling.</p>
+  </description>
+
+  <developer id="com.github.sfesenko">
+    <name>Sergii Fesenko</name>
+  </developer>
+
+  <url type="homepage">@SITE_START_URL@</url>
+
+  <translation type="gettext">webapp</translation>
+  <launchable type="desktop-id">@APP_ID@.desktop</launchable>
+  <content_rating type="oars-1.1" />
+
+  <releases>
+    <release version="0.2.0" date="2026-08-24">
+      <description>
+        <p>Release 0.2.0</p>
+      </description>
+    </release>
+    <release version="0.1.0" date="2025-06-28">
+      <description>
+        <p>Ukraine Constitution Day Release</p>
+        <ul>
+          <li>Initial release</li>
+        </ul>
+      </description>
+    </release>
+  </releases>
+
+</component>

@@ -1,6 +1,6 @@
 <?xml version="1.0" encoding="UTF-8"?>
-<schemalist gettext-domain="whatsv">
-  <schema id="com.github.sfesenko.whatsv" path="/com/github/sfesenko/whatsv/">
+<schemalist gettext-domain="webapp">
+  <schema id="@APP_ID@" path="/@APP_ID_PATH@/">
     <key name="window-width" type="i">
       <default>1200</default>
       <summary>Window width</summary>
