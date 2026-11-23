@@ -31,14 +31,18 @@ A site config is a flat `key=value` file selected at configure time with
 `-Dsite=<path>` (relative paths are resolved against the source root).
 Blank lines and lines starting with `#` are ignored.
 
+`app_id`, `app_name`, `start_url`, at least one `host`, `icon` and
+`icon_symbolic` are required; the icon files must exist, otherwise
+`meson setup` fails.
+
 | Key | Required | Meaning |
 | --- | --- | --- |
 | `app_id` | yes | Reverse-DNS application ID. Drives the desktop file, D-Bus service, GSchema, icon names, storage directory and the installed executable name (its last segment). |
 | `app_name` | yes | Human-readable name shown in the window, desktop entry and About dialog. |
 | `start_url` | yes | URL loaded when the app starts. |
 | `host` | yes, repeatable | Host allowed for navigation and privileged permissions. Repeat the key once per host; a leading dot matches subdomains (`.example.com`). At least one is required. |
-| `icon` | no | Path to a full-color SVG icon, relative to the source root or absolute. |
-| `icon_symbolic` | no | Path to a symbolic SVG icon, relative to the source root or absolute. |
+| `icon` | yes | Path to a full-color SVG icon, relative to the source root or absolute. Must exist at configure time. |
+| `icon_symbolic` | yes | Path to a symbolic SVG icon, relative to the source root or absolute. Must exist at configure time. |
 | `data_dir` | no | Root directory for persistent profile data instead of `XDG_DATA_HOME`. `<data_dir>/<app_id>/profiles/<name>` is used. |
 | `cache_dir` | no | Root directory for profile caches instead of `XDG_CACHE_HOME`. `<cache_dir>/<app_id>/profiles/<name>` is used. |
 | `ephemeral` | no | `true` uses an ephemeral WebKit session: no profile data or credentials are written to disk. Defaults to `false`. |
