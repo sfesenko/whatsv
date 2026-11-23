@@ -18,6 +18,13 @@ test('unit_whatsv_utils', test_whatsv,
   protocol: 'tap',
 )
 
+test('no-hardcoded-site', find_program('bash'),
+  args: [
+    files('check_no_hardcoded_site.sh'),
+    meson.project_source_root() / 'src/application.vala',
+  ],
+)
+
 python3 = find_program('python3')
 
 test('site-config', python3,

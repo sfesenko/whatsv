@@ -23,8 +23,8 @@
  * SPDX-License-Identifier: MIT
  */
 
-[GtkTemplate (ui = "/com/github/sfesenko/whatsv/window.ui")]
-public class Whatsv.Window : Gtk.ApplicationWindow {
+[GtkTemplate (ui = "/com/github/sfesenko/webapp/window.ui")]
+public class WebApp.Window : Gtk.ApplicationWindow {
 
     public string profile { get; construct; }
     public WebKit.WebView view { get; private set; }
@@ -33,8 +33,6 @@ public class Whatsv.Window : Gtk.ApplicationWindow {
     private WebKit.NetworkSession? network_session = null;
     private static GLib.HashTable<string, WebKit.NetworkSession>? sessions = null;
     private GLib.Settings app_settings;
-    private int64 last_load_finished = 0;
-    private bool pending_user_reload = false;
 
     public Window (Gtk.Application app, string profile = "default") {
         Object (application: app, profile: profile);
@@ -42,7 +40,7 @@ public class Whatsv.Window : Gtk.ApplicationWindow {
 
     construct {
         // GSettings for window geometry / zoom (wired to gschema keys)
-        app_settings = new GLib.Settings ("com.github.sfesenko.whatsv");
+        app_settings = new GLib.Settings (Config.APP_ID);
         int sw = app_settings.get_int ("window-width");
         int sh = app_settings.get_int ("window-height");
         bool smax = app_settings.get_boolean ("window-maximized");
@@ -51,7 +49,7 @@ public class Whatsv.Window : Gtk.ApplicationWindow {
 
         // Resolve help overlay from gresource so win.show-help-overlay works
         try {
-            var builder = new Gtk.Builder.from_resource ("/com/github/sfesenko/whatsv/gtk/help-overlay.ui");
+            var builder = new Gtk.Builder.from_resource ("/com/github/sfesenko/webapp/gtk/help-overlay.ui");
             var overlay = builder.get_object ("help_overlay") as Gtk.ShortcutsWindow;
             if (overlay != null) {
                 this.set_help_overlay (overlay);
@@ -83,8 +81,7 @@ public class Whatsv.Window : Gtk.ApplicationWindow {
 
         // Harden / tweak settings
         var settings = view.get_settings () ?? new WebKit.Settings ();
-        // Use Chrome-like UA for best compatibility with WhatsApp Web
-        // Avoid overriding if server already sets via quirks, but WhatsApp blocks generic WebKit UA
+        // Use Chrome-like UA for best compatibility with modern web apps
         settings.user_agent = "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/126.0.0.0 Safari/537.36";
         settings.enable_developer_extras = false;
         settings.enable_javascript = true;
@@ -96,29 +93,27 @@ public class Whatsv.Window : Gtk.ApplicationWindow {
         settings.enable_page_cache = false;
         settings.enable_html5_local_storage = true;
         settings.enable_html5_database = true;
-        // Allow WhatsApp to use fullscreen for calls
+        // Allow the site to use fullscreen for calls
         settings.enable_fullscreen = true;
         view.set_settings (settings);
 
-        // Permissions: WhatsApp needs notifications + media (calls)
+        // Permissions: the site needs notifications + media (calls)
         view.permission_request.connect (on_permission_request);
 
-        // Handle target=_blank / window.open — keep main WhatsApp inside, block Flows etc.
+        // Handle target=_blank / window.open — keep the site inside, block subresources
         view.create.connect ((nav_action) => {
             var uri = nav_action.get_request ().get_uri ();
             if (uri == null) return (Gtk.Widget?) null;
-            if (is_main_whatsapp_uri (uri)) {
-                // New window for web.whatsapp.com itself — load in same view
-                view.load_uri (uri);
-            } else if (is_whatsapp_uri (uri)) {
-                // Flows and other WhatsApp subdomains — do not navigate, do not open browser
-                warning ("Ignoring create for WhatsApp subresource %s", uri);
-            } else {
-                // External — open in default browser
-                var launcher = new Gtk.UriLauncher (uri);
-                launcher.launch.begin (this, null, (obj, res) => {
-                    try { launcher.launch.end (res); } catch (Error e) { warning ("Failed to launch %s: %s", uri, e.message); }
-                });
+            switch (WebApp.Utils.decide_navigation (uri, Config.SITE_HOSTS, false, true)) {
+                case WebApp.Utils.NavigationDisposition.IN_VIEW:
+                    view.load_uri (uri);
+                    break;
+                case WebApp.Utils.NavigationDisposition.OPEN_EXTERNAL:
+                    open_external (uri);
+                    break;
+                default:
+                    warning ("Ignoring create for subresource %s", uri);
+                    break;
             }
             return (Gtk.Widget?) null;
         });
@@ -128,16 +123,15 @@ public class Whatsv.Window : Gtk.ApplicationWindow {
         view.notify["title"].connect (() => {
             var t = view.title;
             if (t != null && t.strip () != "") {
-                this.title = "%s — WhatsV".printf (t);
+                this.title = "%s — %s".printf (t, Config.APP_NAME);
             } else {
-                this.title = "WhatsV";
+                this.title = Config.APP_NAME;
             }
         });
         view.notify["estimated-load-progress"].connect (() => {
             // Could hook progress indicator in headerbar later
         });
         view.load_failed.connect (on_load_failed);
-        view.load_changed.connect (on_load_changed);
         view.notify["is-loading"].connect (() => {
             // placeholder for spinner
         });
@@ -157,8 +151,8 @@ public class Whatsv.Window : Gtk.ApplicationWindow {
                 dl.decide_destination.connect ((suggested) => {
                     var downloads = Environment.get_user_special_dir (UserDirectory.DOWNLOAD);
                     if (downloads == null) downloads = Environment.get_home_dir ();
-                    var base_name = Whatsv.Utils.sanitize_download_filename (suggested);
-                    var dest = Whatsv.Utils.deduplicate_download_path (downloads, base_name);
+                    var base_name = WebApp.Utils.sanitize_download_filename (suggested);
+                    var dest = WebApp.Utils.deduplicate_download_path (downloads, base_name);
                     dl.set_destination (dest);
                     dl.set_allow_overwrite (false);
                     return true;
@@ -181,10 +175,13 @@ public class Whatsv.Window : Gtk.ApplicationWindow {
             this.tooltip_text = "Profile: %s".printf (this.profile);
         }
 
-        this.view.load_uri ("https://web.whatsapp.com");
+        this.view.load_uri (Config.SITE_START_URL);
     }
 
     private static WebKit.NetworkSession get_or_create_session (string profile) {
+        if (Config.EPHEMERAL) {
+            return new WebKit.NetworkSession.ephemeral ();
+        }
         if (sessions == null) {
             sessions = new GLib.HashTable<string, WebKit.NetworkSession> (str_hash, str_equal);
         }
@@ -195,34 +192,16 @@ public class Whatsv.Window : Gtk.ApplicationWindow {
 
         string data_dir;
         string cache_dir;
-        Whatsv.Utils.get_dirs_for_profile (profile, out data_dir, out cache_dir);
+        WebApp.Utils.get_dirs_for_profile (profile, Config.APP_ID, Config.DATA_DIR_ROOT, Config.CACHE_DIR_ROOT, out data_dir, out cache_dir);
 
-        // Legacy migration check before creating modern dirs (otherwise cache_dir exists and check is dead)
-        if (profile == "default") {
-            var legacy_data = Path.build_filename (Environment.get_user_data_dir (), "whatsv");
-            bool modern_has_storage = FileUtils.test (Path.build_filename (data_dir, "storage"), FileTest.IS_DIR)
-                || FileUtils.test (Path.build_filename (data_dir, "LocalStorage"), FileTest.EXISTS)
-                || FileUtils.test (Path.build_filename (data_dir, "IndexedDB"), FileTest.EXISTS);
-            if (FileUtils.test (legacy_data, FileTest.IS_DIR) && !modern_has_storage) {
-                message ("Legacy session dir %s detected; new profile dir is %s. If your login was lost, copy files manually.", legacy_data, data_dir);
-            }
-            var legacy_cache = Path.build_filename (Environment.get_user_cache_dir (), "whatsv");
-            bool modern_cache_exists = FileUtils.test (cache_dir, FileTest.IS_DIR)
-                && FileUtils.test (Path.build_filename (cache_dir, "WebKitCache"), FileTest.IS_DIR);
-            // Check before ensure_dir, otherwise cache_dir always exists
-            if (FileUtils.test (legacy_cache, FileTest.IS_DIR) && !modern_cache_exists) {
-                message ("Legacy cache dir %s detected; new cache dir is %s", legacy_cache, cache_dir);
-            }
-        }
-
-        // Ensure dirs exist (0700 for privacy) after legacy check
+        // Ensure dirs exist (0700 for privacy)
         ensure_dir (data_dir);
         ensure_dir (cache_dir);
 
         var session = new WebKit.NetworkSession (data_dir, cache_dir);
         // Persist credentials (HSTS etc) and ITP off for messaging
         session.set_persistent_credential_storage_enabled (true);
-        // ITP can break WhatsApp; disable
+        // ITP can break single-page apps; disable
         session.set_itp_enabled (false);
 
         sessions.insert (profile, session);
@@ -248,15 +227,24 @@ public class Whatsv.Window : Gtk.ApplicationWindow {
         }
     }
 
+    private void open_external (string uri) {
+        var launcher = new Gtk.UriLauncher (uri);
+        launcher.launch.begin (this, null, (obj, res) => {
+            try {
+                launcher.launch.end (res);
+            } catch (Error e) {
+                warning ("Failed to launch %s: %s", uri, e.message);
+            }
+        });
+    }
+
     // --- Window actions ---
 
     private void on_reload () {
-        pending_user_reload = true;
         view.reload ();
     }
 
     private void on_reload_bypass_cache () {
-        pending_user_reload = true;
         view.reload_bypass_cache ();
     }
 
@@ -305,11 +293,11 @@ public class Whatsv.Window : Gtk.ApplicationWindow {
     // --- WebKit signals ---
 
     private bool on_permission_request (WebKit.PermissionRequest request) {
-        // Only allow known permissions for WhatsApp origins
+        // Only allow known permissions for configured site origins
         var origin = view.get_uri ();
-        bool is_whatsapp = origin != null && (is_main_whatsapp_uri (origin) || is_whatsapp_uri (origin));
-        if (!is_whatsapp) {
-            warning ("Denying %s for non-WhatsApp origin %s", request.get_type ().name (), origin ?? "(null)");
+        bool is_site = WebApp.Utils.is_allowed_host (origin ?? "", Config.SITE_HOSTS);
+        if (!is_site) {
+            warning ("Denying %s for untrusted origin %s", request.get_type ().name (), origin ?? "(null)");
             request.deny ();
             return true;
         }
@@ -338,161 +326,57 @@ public class Whatsv.Window : Gtk.ApplicationWindow {
         return true;
     }
 
-    private bool is_main_whatsapp_uri (string uri) {
-        return Whatsv.Utils.is_main_whatsapp_uri (uri);
-    }
-
-    private bool is_whatsapp_uri (string uri) {
-        return Whatsv.Utils.is_whatsapp_uri (uri);
-    }
-
     private bool on_decide_policy (WebKit.PolicyDecision decision, WebKit.PolicyDecisionType type) {
-        if (type == WebKit.PolicyDecisionType.NAVIGATION_ACTION) {
-            var nav = (WebKit.NavigationPolicyDecision) decision;
-            var action = nav.get_navigation_action ();
-            var req = action.get_request ();
-            var uri = req.get_uri ();
-            if (uri == null) {
-                decision.use ();
-                return true;
-            }
-
-            // Only web.whatsapp.com is allowed as top-level navigation inside WebView.
-            // Other WhatsApp hosts (flows.whatsapp.net, etc.) are either XHR/subresource
-            // or external help links. They must not trigger top-level WebView navigation,
-            // otherwise the WhatsApp loading screen appears twice.
-            if (is_main_whatsapp_uri (uri)) {
-                // WhatsApp Web does an automatic reload ~7s after showing chats
-                // (RELOAD navigation) when using a per-profile NetworkSession.
-                // Suppress that automatic reload, but allow explicit user reloads via Ctrl+R.
-                if (action.get_navigation_type () == WebKit.NavigationType.RELOAD) {
-                    if (pending_user_reload) {
-                        pending_user_reload = false;
-                        decision.use ();
-                        return true;
-                    }
-                    int64 now = GLib.get_monotonic_time ();
-                    if (last_load_finished != 0 && (now - last_load_finished) < 15 * 1000 * 1000) {
-                        warning ("Suppressing automatic reload for %s (%.1fs after load)", uri, (now - last_load_finished) / 1000000.0);
-                        decision.ignore ();
-                        return true;
-                    }
-                }
-                decision.use ();
-                return true;
-            }
-            if (is_whatsapp_uri (uri)) {
-                // WhatsApp subresource / non-main host
-                if (action.get_navigation_type () == WebKit.NavigationType.LINK_CLICKED) {
-                    // User clicked a WhatsApp link (e.g. faq) — open externally
-                    var launcher = new Gtk.UriLauncher (uri);
-                    launcher.launch.begin (this, null, (obj, res) => {
-                        try { launcher.launch.end (res); } catch (Error e) { warning ("Failed to launch %s: %s", uri, e.message); }
-                    });
-                    decision.ignore ();
-                    return true;
-                } else {
-                    // Non-click navigation to flows etc. — silently ignore (was opening browser twice)
-                    // Do not use() — that would navigate WebView away from WhatsApp.
-                    warning ("Ignoring WhatsApp subresource navigation to %s", uri);
-                    decision.ignore ();
-                    return true;
-                }
-            }
-
-            // External http(s): only honor explicit user clicks (LinkClicked).
-            // Other navigation types (form, reload, API-driven) are ignored to avoid
-            // stray browser popups.
-            if (uri.has_prefix ("http://") || uri.has_prefix ("https://")) {
-                if (action.get_navigation_type () == WebKit.NavigationType.LINK_CLICKED) {
-                    var launcher = new Gtk.UriLauncher (uri);
-                    launcher.launch.begin (this, null, (obj, res) => {
-                        try {
-                            launcher.launch.end (res);
-                        } catch (Error e) {
-                            warning ("Failed to launch uri %s: %s", uri, e.message);
-                        }
-                    });
-                    decision.ignore ();
-                    return true;
-                } else {
-                    warning ("Ignoring non-click navigation to %s", uri);
-                    decision.ignore ();
-                    return true;
-                }
-            } else {
-                // Non-http(s) schemes: allow only benign in-page schemes
-                string low = uri.down ();
-                if (low.has_prefix ("about:") || low.has_prefix ("data:") || low.has_prefix ("blob:") || low.has_prefix ("webkit:")) {
-                    decision.use ();
-                    return true;
-                }
-                warning ("Ignoring navigation to unsupported scheme: %s", uri);
-                decision.ignore ();
-                return true;
-            }
-        } else if (type == WebKit.PolicyDecisionType.NEW_WINDOW_ACTION) {
-            var nav = (WebKit.NavigationPolicyDecision) decision;
-            var uri = nav.get_navigation_action ().get_request ().get_uri ();
-            if (uri == null) {
-                decision.use ();
-                return true;
-            }
-            if (is_main_whatsapp_uri (uri)) {
-                decision.use ();
-                return true;
-            }
-            if (is_whatsapp_uri (uri)) {
-                // Flows etc. in new window — ignore
-                warning ("Ignoring new-window WhatsApp subresource %s", uri);
-                decision.ignore ();
-                return true;
-            }
-            if (uri.has_prefix ("http://") || uri.has_prefix ("https://")) {
-                var launcher = new Gtk.UriLauncher (uri);
-                launcher.launch.begin (this, null, (obj, res) => {
-                    try { launcher.launch.end (res); } catch (Error e) { warning ("Failed to launch %s: %s", uri, e.message); }
-                });
-                decision.ignore ();
-                return true;
-            } else {
-                string low = uri.down ();
-                if (low.has_prefix ("about:") || low.has_prefix ("data:") || low.has_prefix ("blob:") || low.has_prefix ("webkit:")) {
-                    decision.use ();
-                    return true;
-                }
-                warning ("Ignoring new-window navigation to unsupported scheme: %s", uri);
-                decision.ignore ();
-                return true;
-            }
+        if (type != WebKit.PolicyDecisionType.NAVIGATION_ACTION
+                && type != WebKit.PolicyDecisionType.NEW_WINDOW_ACTION) {
+            decision.use ();
+            return true;
         }
-        decision.use ();
+        var nav = decision as WebKit.NavigationPolicyDecision;
+        if (nav == null) {
+            decision.use ();
+            return true;
+        }
+        var action = nav.get_navigation_action ();
+        var uri = action.get_request ().get_uri ();
+        if (uri == null) {
+            decision.use ();
+            return true;
+        }
+
+        bool is_link_clicked = action.get_navigation_type () == WebKit.NavigationType.LINK_CLICKED;
+        bool is_new_window = type == WebKit.PolicyDecisionType.NEW_WINDOW_ACTION;
+        switch (WebApp.Utils.decide_navigation (uri, Config.SITE_HOSTS, is_link_clicked, is_new_window)) {
+            case WebApp.Utils.NavigationDisposition.IN_VIEW:
+                decision.use ();
+                break;
+            case WebApp.Utils.NavigationDisposition.OPEN_EXTERNAL:
+                open_external (uri);
+                decision.ignore ();
+                break;
+            default:
+                warning ("Ignoring navigation to %s", uri);
+                decision.ignore ();
+                break;
+        }
         return true;
     }
 
     private bool on_load_failed (WebKit.LoadEvent event, string failing_uri, Error error) {
         warning ("Load failed %s: %s", failing_uri, error.message);
-        pending_user_reload = false;
         // Let WebKit show error page; return false to allow default handling
         return false;
     }
-
-    private void on_load_changed (WebKit.LoadEvent event) {
-        if (event == WebKit.LoadEvent.FINISHED) {
-            last_load_finished = GLib.get_monotonic_time ();
-            pending_user_reload = false;
-        }
-    }
 }
 
-public class Whatsv.Application : Gtk.Application {
+public class WebApp.Application : Gtk.Application {
     private string requested_profile = "default";
 
     public Application () {
         Object (
-            application_id: "com.github.sfesenko.whatsv",
+            application_id: Config.APP_ID,
             flags: ApplicationFlags.HANDLES_COMMAND_LINE,
-            resource_base_path: "/com/github/sfesenko/whatsv"
+            resource_base_path: "/com/github/sfesenko/webapp"
         );
     }
 
@@ -551,7 +435,7 @@ public class Whatsv.Application : Gtk.Application {
 
         // Search existing window with same profile — present it
         foreach (var w in this.get_windows ()) {
-            var win = w as Whatsv.Window;
+            var win = w as WebApp.Window;
             if (win != null && win.profile == this.requested_profile) {
                 win.present ();
                 return;
@@ -560,7 +444,7 @@ public class Whatsv.Application : Gtk.Application {
 
         // If profile requested but active window exists with different profile, create new window (single-process multi-window)
         // If no window exists, create default/new profile window
-        var win = new Whatsv.Window (this, this.requested_profile);
+        var win = new WebApp.Window (this, this.requested_profile);
         win.present ();
     }
 
@@ -573,15 +457,15 @@ public class Whatsv.Application : Gtk.Application {
         string[] authors = { "Sergii Fesenko" };
         Gtk.show_about_dialog (
             this.active_window,
-            "program-name", "WhatsV",
-            "logo-icon-name", "com.github.sfesenko.whatsv",
+            "program-name", Config.APP_NAME,
+            "logo-icon-name", Config.APP_ID,
             "authors", authors,
             "translator-credits", _("translator-credits"),
             "version", Config.PACKAGE_VERSION,
             "copyright", "© 2025 Sergii Fesenko",
             "license-type", Gtk.License.MIT_X11,
             "website", "https://github.com/sfesenko/whatsv",
-            "comments", _("Simple Vala WhatsApp Web Client")
+            "comments", _("Simple %s web client").printf (Config.APP_NAME)
         );
     }
 }

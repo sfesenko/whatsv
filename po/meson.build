@@ -1,1 +1,1 @@
-i18n.gettext('whatsv', preset: 'glib')
+i18n.gettext('webapp', preset: 'glib')
