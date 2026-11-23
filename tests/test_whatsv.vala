@@ -1,14 +1,17 @@
 using WebApp.Utils;
 
-const string WA_HOSTS = "web.whatsapp.com,whatsapp.com,whatsapp.net,.whatsapp.com,.whatsapp.net,.fbcdn.net,.facebook.com";
+const string WA_HOSTS = "web.whatsapp.com";
 const string OTHER_HOSTS = "other.ai,.other.ai,auth.other.ai";
 
 void test_is_allowed_host () {
     // exact and subdomain matches, case-insensitive
     assert (is_allowed_host ("https://web.whatsapp.com/", WA_HOSTS));
     assert (is_allowed_host ("https://WEB.WHATSAPP.COM/", WA_HOSTS));
-    assert (is_allowed_host ("https://faq.whatsapp.com/", WA_HOSTS));
+    assert (is_allowed_host ("https://web.whatsapp.com/?ref=chat", WA_HOSTS));
     assert (is_allowed_host ("https://other.ai/chat/agent", OTHER_HOSTS));
+    assert (is_allowed_host ("https://auth.other.ai/login", OTHER_HOSTS));
+    // the shipped WhatsApp config deliberately allows only the start host
+    assert (!is_allowed_host ("https://faq.whatsapp.com/", WA_HOSTS));
     // lookalikes and query tricks must not match
     assert (!is_allowed_host ("https://web.whatsapp.com.evil.com/", WA_HOSTS));
     assert (!is_allowed_host ("https://other.ai.evil.com/", OTHER_HOSTS));

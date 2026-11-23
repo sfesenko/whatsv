@@ -19,7 +19,8 @@ client — previously shipped as WhatsV — with persistent sessions and profile
   - `Ctrl+Plus/Equal` / `Ctrl+Minus` / `Ctrl+0` zoom in/out/reset
   - `Alt+Left` / `Ctrl+[` back, `Alt+Right` / `Ctrl+]` forward
 - Desktop integration generated from the site config: desktop entry, D-Bus
-  service, GSchema, icons and AppStream metadata named after `<app_id>`
+  service, GSchema, icons, AppStream metadata and the gettext domain named
+  after `<app_id>`
 
 ## Dependencies
 - `gtk4 >= 4.12`
@@ -33,16 +34,23 @@ Blank lines and lines starting with `#` are ignored.
 
 `app_id`, `app_name`, `start_url`, at least one `host`, `icon` and
 `icon_symbolic` are required; the icon files must exist, otherwise
-`meson setup` fails.
+`meson setup` fails. `app_id` must be reverse-DNS: at least two dot-separated
+segments, each starting with an ASCII letter and otherwise using only
+`A-Z a-z 0-9 _ -`. Invalid IDs, unknown keys and malformed booleans fail at
+configure time with a message naming the key.
+
+The default WhatsApp config deliberately ships only `host=web.whatsapp.com`,
+which narrows top-level navigation to the start host.
 
 | Key | Required | Meaning |
 | --- | --- | --- |
-| `app_id` | yes | Reverse-DNS application ID. Drives the desktop file, D-Bus service, GSchema, icon names, storage directory and the installed executable name (its last segment). |
+| `app_id` | yes | Reverse-DNS application ID. Drives the desktop file, D-Bus service, GSchema, icon names, storage directory, gettext domain and the default installed executable name (its last segment). |
 | `app_name` | yes | Human-readable name shown in the window, desktop entry and About dialog. |
 | `start_url` | yes | URL loaded when the app starts. |
 | `host` | yes, repeatable | Host allowed for navigation and privileged permissions. Repeat the key once per host. An entry matches the host itself and every subdomain; a leading dot is stripped, so `example.com` and `.example.com` are equivalent. At least one is required, and the `start_url` host must be covered by one of the entries. |
 | `icon` | yes | Path to a full-color SVG icon, relative to the source root or absolute. Must exist at configure time. |
 | `icon_symbolic` | yes | Path to a symbolic SVG icon, relative to the source root or absolute. Must exist at configure time. |
+| `exec_name` | no | Installed executable name. Defaults to the last segment of `app_id`. Set it when two sites share a last segment but the packages should not install the same file in `/usr/bin`. Allowed characters: `A-Z a-z 0-9 _ -`. |
 | `data_dir` | no | Absolute path to a root directory for persistent profile data instead of `XDG_DATA_HOME`. `<data_dir>/<app_id>/profiles/<name>` is used. Relative values are not resolved; they are used verbatim and usually point outside the intended location. |
 | `cache_dir` | no | Absolute path to a root directory for profile caches instead of `XDG_CACHE_HOME`. `<cache_dir>/<app_id>/profiles/<name>` is used. Relative values are not resolved; they are used verbatim. |
 | `ephemeral` | no | `true` uses an ephemeral WebKit session: no profile data or credentials are written to disk. Defaults to `false`. |
@@ -87,7 +95,7 @@ meson setup build-mysite -Dsite="$HOME/.config/webapp/mysite.conf"
 meson compile -C build-mysite
 ```
 
-Run (executable name is the last segment of `app_id`):
+Run (executable name is the last segment of `app_id` unless `exec_name` is set):
 
 ```sh
 ./build/src/whatsv
@@ -112,4 +120,6 @@ session data at all.
   inside `misc/`
 - One source tree, one package per site: copy `misc/PKGBUILD`, change
   `pkgname` and point `-Dsite` at that site's config. Installed files and
-  executable names derive from `app_id`, so packages install side by side.
+  the default executable name derive from `app_id`, so packages normally
+  install side by side; if two `app_id`s share a last segment, set distinct
+  `exec_name` values (defaults otherwise collide in `/usr/bin`).

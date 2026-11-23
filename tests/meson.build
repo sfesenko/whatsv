@@ -27,6 +27,7 @@ test('no-hardcoded-site', find_program('bash'),
 )
 
 python3 = find_program('python3')
+meson_bin = find_program('meson')
 
 test('site-config', python3,
   args: [
@@ -34,4 +35,23 @@ test('site-config', python3,
     config_h,
     site_path,
   ],
+)
+
+test('config-errors', python3,
+  args: [
+    files('check_config_errors.py'),
+    meson_bin.full_path(),
+    meson.project_source_root(),
+    meson.current_source_dir() / 'fixtures',
+  ],
+  timeout: 600,
+)
+
+test('disjoint-install', python3,
+  args: [
+    files('check_disjoint_install.py'),
+    meson_bin.full_path(),
+    meson.project_source_root(),
+  ],
+  timeout: 1800,
 )

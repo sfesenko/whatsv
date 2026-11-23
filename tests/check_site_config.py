@@ -10,6 +10,8 @@ import sys
 
 DEFINE_RE = re.compile(r'^#define\s+(\w+)\s+(.*?)\s*$')
 
+REQUIRED_KEYS = ('app_id', 'app_name', 'start_url', 'icon', 'icon_symbolic')
+
 
 def read_defines(path):
     defines = {}
@@ -56,15 +58,25 @@ def main(argv):
     defines = read_defines(config_h)
     keys, hosts = parse_site_config(site_conf)
 
+    for key in REQUIRED_KEYS:
+        if not keys.get(key, '').strip():
+            print(f'{key}: required key missing or empty in {site_conf}', file=sys.stderr)
+            return 1
+    if not hosts or not any(host.strip() for host in hosts):
+        print(f'host: required key missing or empty in {site_conf}', file=sys.stderr)
+        return 1
+
     try:
         app_id = keys['app_id']
+        exec_name = keys.get('exec_name', '').strip() or app_id.split('.')[-1]
         expected = {
             'APP_ID': app_id,
             'APP_NAME': keys['app_name'],
             'SITE_START_URL': keys['start_url'],
             'SITE_HOSTS': ','.join(hosts),
-            'APP_EXEC': app_id.split('.')[-1],
+            'APP_EXEC': exec_name,
             'APP_ID_PATH': app_id.replace('.', '/'),
+            'GETTEXT_PACKAGE': app_id,
             'PERSIST_COOKIES': bool_define(keys, 'persist_cookies'),
             'EPHEMERAL': bool_define(keys, 'ephemeral', 'false'),
         }
