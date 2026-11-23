@@ -9,8 +9,8 @@ url="https://github.com/sfesenko/whatsv"
 license=('MIT')
 depends=('gtk4' 'webkitgtk-6.0' 'hicolor-icon-theme')
 makedepends=('git' 'meson' 'ninja' 'vala' 'glib2' 'gtk4' 'webkitgtk-6.0')
-provides=("${pkgname%-git}")
-conflicts=("${pkgname%-git}")
+provides=("${pkgname%-git}" 'whatsv')
+conflicts=("${pkgname%-git}" 'whatsv-git')
 source=("${pkgname}::git+https://github.com/sfesenko/whatsv.git")
 sha256sums=('SKIP')
 pkgver() {
