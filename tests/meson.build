@@ -17,3 +17,16 @@ test_whatsv = executable('test_whatsv',
 test('unit_whatsv_utils', test_whatsv,
   protocol: 'tap',
 )
+
+python3 = find_program('python3')
+
+test('site-config', python3,
+  args: [
+    files('check_site_config.py'),
+    config_h,
+    app_id,
+    app_name,
+    site_start_url,
+    site_hosts,
+  ],
+)

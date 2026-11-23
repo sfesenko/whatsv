@@ -1,13 +1,13 @@
-application_id = 'com.github.sfesenko.whatsv'
-
 scalable_dir = 'hicolor' / 'scalable' / 'apps'
 install_data(
-  scalable_dir / ('@0@.svg').format(application_id),
+  site_icon,
+  rename: app_id + '.svg',
   install_dir: get_option('datadir') / 'icons' / scalable_dir
 )
 
 symbolic_dir = 'hicolor' / 'symbolic' / 'apps'
 install_data(
-  symbolic_dir / ('@0@-symbolic.svg').format(application_id),
+  site_icon_symbolic,
+  rename: app_id + '-symbolic.svg',
   install_dir: get_option('datadir') / 'icons' / symbolic_dir
 )
