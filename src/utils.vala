@@ -1,41 +1,87 @@
-/* Whatsv.Utils — pure helpers extracted for unit testing
+/* WebApp.Utils — pure helpers extracted for unit testing
  * SPDX-License-Identifier: MIT
  */
 
-namespace Whatsv.Utils {
+namespace WebApp.Utils {
 
-    public bool is_main_whatsapp_uri (string uri) {
+    public enum NavigationDisposition {
+        IN_VIEW,
+        OPEN_EXTERNAL,
+        IGNORE
+    }
+
+    private string? scheme_of (string uri) {
+        int colon = uri.index_of (":");
+        if (colon <= 0) return null;
+        return uri.substring (0, colon).down ();
+    }
+
+    private string? extract_host_from_string (string uri) {
+        var low = uri.strip ().down ();
+        if (!low.has_prefix ("https://")) return null;
+        var rest = low.substring (8);
+        int end = rest.length;
+        int slash = rest.index_of ("/");
+        if (slash >= 0 && slash < end) end = slash;
+        int query = rest.index_of ("?");
+        if (query >= 0 && query < end) end = query;
+        int fragment = rest.index_of ("#");
+        if (fragment >= 0 && fragment < end) end = fragment;
+        var authority = rest.substring (0, end);
+        int at = authority.last_index_of ("@");
+        if (at >= 0) authority = authority.substring (at + 1);
+        if (authority.has_prefix ("[")) {
+            int close = authority.index_of ("]");
+            if (close <= 1) return null;
+            authority = authority.substring (1, close - 1);
+        } else {
+            int colon = authority.index_of (":");
+            if (colon >= 0) authority = authority.substring (0, colon);
+        }
+        authority = authority.strip ();
+        if (authority == "") return null;
+        return authority;
+    }
+
+    private string? extract_host (string uri) {
         try {
-            var guri = GLib.Uri.parse (uri, GLib.UriFlags.NONE);
+            var guri = GLib.Uri.parse (uri.strip (), GLib.UriFlags.NONE);
             var host = guri.get_host ();
-            if (host == null) return false;
-            return host.down () == "web.whatsapp.com";
+            if (host == null || host == "") return null;
+            return host.down ();
         } catch (Error e) {
-            string low = uri.down ();
-            return low.has_prefix ("https://web.whatsapp.com/") || low == "https://web.whatsapp.com";
+            return extract_host_from_string (uri);
         }
     }
 
-    public bool is_whatsapp_uri (string uri) {
-        try {
-            var guri = GLib.Uri.parse (uri, GLib.UriFlags.NONE);
-            var host = guri.get_host ();
-            if (host == null) return false;
-            host = host.down ();
-            return host == "web.whatsapp.com"
-                || host == "whatsapp.com"
-                || host == "whatsapp.net"
-                || host.has_suffix (".whatsapp.com")
-                || host.has_suffix (".whatsapp.net")
-                || host.has_suffix (".fbcdn.net")
-                || host.has_suffix (".facebook.com")
-                || host == "flows.whatsapp.net";
-        } catch (Error e) {
-            string low = uri.down ();
-            return low.has_prefix ("https://web.whatsapp.com")
-                || low.has_prefix ("https://whatsapp.com")
-                || low.has_prefix ("https://") && (low.contains (".whatsapp.com") || low.contains (".whatsapp.net") || low.contains (".fbcdn.net"));
+    public bool is_allowed_host (string uri, string allowed_hosts) {
+        var host = extract_host (uri);
+        if (host == null) return false;
+        int start = 0;
+        while (true) {
+            int comma = allowed_hosts.index_of (",", start);
+            string entry = comma < 0 ? allowed_hosts.substring (start) : allowed_hosts.substring (start, comma - start);
+            var candidate = entry.strip ().down ();
+            if (candidate.has_prefix (".")) candidate = candidate.substring (1);
+            if (candidate != "" && (host == candidate || host.has_suffix ("." + candidate))) return true;
+            if (comma < 0) break;
+            start = comma + 1;
         }
+        return false;
+    }
+
+    public bool is_benign_scheme (string uri) {
+        var scheme = scheme_of (uri);
+        return scheme == "about" || scheme == "data" || scheme == "blob" || scheme == "webkit";
+    }
+
+    public NavigationDisposition decide_navigation (string uri, string allowed_hosts, bool is_link_clicked, bool is_new_window) {
+        var scheme = scheme_of (uri);
+        bool is_http = scheme == "http" || scheme == "https";
+        if (is_http && is_allowed_host (uri, allowed_hosts)) return NavigationDisposition.IN_VIEW;
+        if (is_benign_scheme (uri)) return NavigationDisposition.IN_VIEW;
+        if (is_http && (is_link_clicked || is_new_window)) return NavigationDisposition.OPEN_EXTERNAL;
+        return NavigationDisposition.IGNORE;
     }
 
     public string sanitize_profile_name (string profile) {
@@ -61,12 +107,12 @@ namespace Whatsv.Utils {
         return safe;
     }
 
-    public void get_dirs_for_profile (string profile, out string data_dir, out string cache_dir) {
+    public void get_dirs_for_profile (string profile, string app_id, string data_root, string cache_root, out string data_dir, out string cache_dir) {
         string safe = sanitize_profile_name (profile);
-        var base_data = Path.build_filename (Environment.get_user_data_dir (), "com.github.sfesenko.whatsv", "profiles", safe);
-        var base_cache = Path.build_filename (Environment.get_user_cache_dir (), "com.github.sfesenko.whatsv", "profiles", safe);
-        data_dir = base_data;
-        cache_dir = base_cache;
+        var base_data = data_root != "" ? data_root : Environment.get_user_data_dir ();
+        var base_cache = cache_root != "" ? cache_root : Environment.get_user_cache_dir ();
+        data_dir = Path.build_filename (base_data, app_id, "profiles", safe);
+        cache_dir = Path.build_filename (base_cache, app_id, "profiles", safe);
     }
 
     public string sanitize_download_filename (string suggested) {

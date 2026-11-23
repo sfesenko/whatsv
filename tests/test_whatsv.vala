@@ -1,37 +1,48 @@
-using Whatsv.Utils;
+using WebApp.Utils;
 
-void test_is_main_whatsapp_uri () {
-    // exact main host
-    assert (is_main_whatsapp_uri ("https://web.whatsapp.com/"));
-    assert (is_main_whatsapp_uri ("https://web.whatsapp.com"));
-    assert (is_main_whatsapp_uri ("https://WEB.WHATSAPP.COM/"));
-    // not main
-    assert (!is_main_whatsapp_uri ("https://whatsapp.com/"));
-    assert (!is_main_whatsapp_uri ("https://www.whatsapp.com/"));
-    assert (!is_main_whatsapp_uri ("https://flows.whatsapp.net/flows/cache_management/"));
-    assert (!is_main_whatsapp_uri ("https://example.com/"));
-    // evil suffix must not be considered main
-    assert (!is_main_whatsapp_uri ("https://web.whatsapp.com.evil.com/"));
-    assert (!is_main_whatsapp_uri ("https://evil.com/?x=web.whatsapp.com"));
+const string WA_HOSTS = "web.whatsapp.com,whatsapp.com,whatsapp.net,.whatsapp.com,.whatsapp.net,.fbcdn.net,.facebook.com";
+const string OTHER_HOSTS = "other.ai,.other.ai,auth.other.ai";
+
+void test_is_allowed_host () {
+    // exact and subdomain matches, case-insensitive
+    assert (is_allowed_host ("https://web.whatsapp.com/", WA_HOSTS));
+    assert (is_allowed_host ("https://WEB.WHATSAPP.COM/", WA_HOSTS));
+    assert (is_allowed_host ("https://faq.whatsapp.com/", WA_HOSTS));
+    assert (is_allowed_host ("https://other.ai/chat/agent", OTHER_HOSTS));
+    // lookalikes and query tricks must not match
+    assert (!is_allowed_host ("https://web.whatsapp.com.evil.com/", WA_HOSTS));
+    assert (!is_allowed_host ("https://other.ai.evil.com/", OTHER_HOSTS));
+    assert (!is_allowed_host ("https://evil.com/?x=whatsapp.com", WA_HOSTS));
+    assert (!is_allowed_host ("https://notother.ai/", OTHER_HOSTS));
+    // unparseable URI falls back to the string check and finds no allowed host
+    assert (!is_allowed_host ("https://exa%mple.com/", WA_HOSTS));
 }
 
-void test_is_whatsapp_uri () {
-    assert (is_whatsapp_uri ("https://web.whatsapp.com/"));
-    assert (is_whatsapp_uri ("https://whatsapp.com/"));
-    assert (is_whatsapp_uri ("https://faq.whatsapp.com/"));
-    assert (is_whatsapp_uri ("https://flows.whatsapp.net/flows/cache_management/"));
-    assert (is_whatsapp_uri ("https://static.whatsapp.net/"));
-    assert (is_whatsapp_uri ("https://pps.whatsapp.net/"));
-    assert (is_whatsapp_uri ("https://mmg.whatsapp.net/"));
-    assert (is_whatsapp_uri ("https://scontent.fbcdn.net/v/abc.jpg"));
-    assert (is_whatsapp_uri ("https://www.facebook.com/"));
-    // not whatsapp
-    assert (!is_whatsapp_uri ("https://example.com/"));
-    assert (!is_whatsapp_uri ("https://evil.com/?x=whatsapp.com"));
-    assert (!is_whatsapp_uri ("https://web.whatsapp.com.evil.com/"));
-    assert (!is_whatsapp_uri ("https://facebook.com.evil.com/"));
-    // fallback substring in catch is not used for valid URIs, but ensure evil with whatsapp in query is not misclassified as whatsapp when host is evil.com
-    // For valid URI parsing, host is evil.com, so should be false even if query contains whatsapp.com
+void test_is_benign_scheme () {
+    assert (is_benign_scheme ("about:blank"));
+    assert (is_benign_scheme ("data:text/plain,hi"));
+    assert (is_benign_scheme ("blob:https://other.ai/x"));
+    assert (is_benign_scheme ("webkit:something"));
+    assert (!is_benign_scheme ("https://other.ai/"));
+    assert (!is_benign_scheme ("ftp://other.ai/"));
+    assert (!is_benign_scheme ("not a uri"));
+}
+
+void test_decide_navigation () {
+    // same-origin SPA routes stay in the view, clicked or not
+    assert (decide_navigation ("https://other.ai/chat/agent", OTHER_HOSTS, false, false) == NavigationDisposition.IN_VIEW);
+    assert (decide_navigation ("https://other.ai/chat/agent", OTHER_HOSTS, true, false) == NavigationDisposition.IN_VIEW);
+    // benign internal schemes stay in the view
+    assert (decide_navigation ("about:blank", OTHER_HOSTS, false, false) == NavigationDisposition.IN_VIEW);
+    assert (decide_navigation ("data:text/plain,hi", OTHER_HOSTS, false, false) == NavigationDisposition.IN_VIEW);
+    assert (decide_navigation ("blob:https://other.ai/x", OTHER_HOSTS, false, false) == NavigationDisposition.IN_VIEW);
+    assert (decide_navigation ("webkit:something", OTHER_HOSTS, false, false) == NavigationDisposition.IN_VIEW);
+    // external links are handed to the browser when clicked or opened in a new window
+    assert (decide_navigation ("https://example.com/", OTHER_HOSTS, true, false) == NavigationDisposition.OPEN_EXTERNAL);
+    assert (decide_navigation ("https://example.com/", OTHER_HOSTS, false, true) == NavigationDisposition.OPEN_EXTERNAL);
+    // non-click external navigations and unknown schemes are ignored
+    assert (decide_navigation ("https://example.com/", OTHER_HOSTS, false, false) == NavigationDisposition.IGNORE);
+    assert (decide_navigation ("ftp://other.ai/", OTHER_HOSTS, false, false) == NavigationDisposition.IGNORE);
 }
 
 void test_sanitize_profile_name () {
@@ -66,21 +77,27 @@ void test_sanitize_profile_name () {
 
 void test_get_dirs_for_profile () {
     string data, cache;
-    get_dirs_for_profile ("work", out data, out cache);
+    get_dirs_for_profile ("work", "com.github.sfesenko.whatsv", "", "", out data, out cache);
     assert (data.contains ("/com.github.sfesenko.whatsv/profiles/work"));
     assert (cache.contains ("/com.github.sfesenko.whatsv/profiles/work"));
-    // traversal sanitized
-    get_dirs_for_profile ("../etc/passwd", out data, out cache);
+    // both roots are sensitive: traversal is sanitized in each
+    get_dirs_for_profile ("../etc/passwd", "com.github.sfesenko.whatsv", "", "", out data, out cache);
     assert (!data.contains ("../"));
     assert (!data.has_suffix ("/etc/passwd"));
     assert (!cache.contains ("../"));
-    // default goes to per-profile isolated (not webkitgtk after revert, but we test that it is under profiles/default)
-    // After revert, default is per-profile isolated
-    get_dirs_for_profile ("default", out data, out cache);
+    assert (!cache.has_suffix ("/etc/passwd"));
+    get_dirs_for_profile ("default", "com.github.sfesenko.whatsv", "", "", out data, out cache);
     assert (data.contains ("/com.github.sfesenko.whatsv/profiles/default"));
-    // empty
-    get_dirs_for_profile ("", out data, out cache);
+    assert (cache.contains ("/com.github.sfesenko.whatsv/profiles/default"));
+    // empty profile sanitizes to default
+    get_dirs_for_profile ("", "com.github.sfesenko.whatsv", "", "", out data, out cache);
     assert (data.contains ("/default"));
+    // explicit roots replace the XDG roots verbatim for both data and cache
+    get_dirs_for_profile ("work", "com.github.sfesenko.whatsv", "/tmp/site-data", "/tmp/site-cache", out data, out cache);
+    assert (data.has_prefix ("/tmp/site-data/"));
+    assert (cache.has_prefix ("/tmp/site-cache/"));
+    assert (data.contains ("/com.github.sfesenko.whatsv/profiles/work"));
+    assert (cache.contains ("/com.github.sfesenko.whatsv/profiles/work"));
 }
 
 void test_sanitize_download_filename () {
@@ -127,8 +144,9 @@ void test_deduplicate_download_path () {
 
 int main (string[] args) {
     Test.init (ref args);
-    Test.add_func ("/whatsv/is_main_whatsapp_uri", test_is_main_whatsapp_uri);
-    Test.add_func ("/whatsv/is_whatsapp_uri", test_is_whatsapp_uri);
+    Test.add_func ("/whatsv/is_allowed_host", test_is_allowed_host);
+    Test.add_func ("/whatsv/is_benign_scheme", test_is_benign_scheme);
+    Test.add_func ("/whatsv/decide_navigation", test_decide_navigation);
     Test.add_func ("/whatsv/sanitize_profile_name", test_sanitize_profile_name);
     Test.add_func ("/whatsv/get_dirs_for_profile", test_get_dirs_for_profile);
     Test.add_func ("/whatsv/sanitize_download_filename", test_sanitize_download_filename);
