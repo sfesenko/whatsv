@@ -17,7 +17,7 @@
 
   <url type="homepage">@SITE_START_URL@</url>
 
-  <translation type="gettext">webapp</translation>
+  <translation type="gettext">@APP_ID@</translation>
   <launchable type="desktop-id">@APP_ID@.desktop</launchable>
   <content_rating type="oars-1.1" />
 

@@ -20,6 +20,17 @@ endif
 
 site = {}
 site_hosts_list = []
+known_keys = [
+  'app_id',
+  'app_name',
+  'start_url',
+  'host',
+  'icon',
+  'icon_symbolic',
+  'data_dir',
+  'cache_dir',
+  'ephemeral',
+]
 foreach line : fs.read(site_path).split('\n')
   line = line.strip()
   if line == '' or line.startswith('#')
@@ -37,7 +48,13 @@ foreach line : fs.read(site_path).split('\n')
     part_index += 1
   endforeach
   value = '='.join(value_parts).strip()
+  if not known_keys.contains(key)
+    error('Site config @0@ has unknown key "@1@"; known keys are @2@'.format(site_path, key, ', '.join(known_keys)))
+  endif
   if key == 'host'
+    if value == ''
+      error('Site config @0@ has an empty "host" value'.format(site_path))
+    endif
     site_hosts_list += [value]
   else
     site += {key: value}
@@ -47,6 +64,9 @@ endforeach
 foreach key : ['app_id', 'app_name', 'start_url']
   if not site.has_key(key)
     error('Site config @0@ is missing required key "@1@"'.format(site_path, key))
+  endif
+  if site.get(key) == ''
+    error('Site config @0@ has an empty required key "@1@"'.format(site_path, key))
   endif
 endforeach
 
@@ -58,6 +78,44 @@ app_id = site.get('app_id')
 app_name = site.get('app_name')
 site_start_url = site.get('start_url')
 site_hosts = ','.join(site_hosts_list)
+
+# The start URL must be served by one of the allowed hosts, otherwise the app
+# opens a blank window because navigation is refused at startup.
+start_host = site_start_url.strip().to_lower()
+start_scheme_parts = start_host.split('://')
+if start_scheme_parts.length() > 1
+  start_host = start_scheme_parts[1]
+endif
+start_host = start_host.split('/')[0]
+start_host = start_host.split('?')[0]
+start_host = start_host.split('#')[0]
+start_userinfo_parts = start_host.split('@')
+if start_userinfo_parts.length() > 1
+  start_host = start_userinfo_parts[start_userinfo_parts.length() - 1]
+endif
+if start_host.startswith('[') and start_host.contains(']')
+  start_host = start_host.split(']')[0].substring(1)
+else
+  start_host = start_host.split(':')[0]
+endif
+start_host = start_host.strip()
+start_host_covered = false
+foreach entry : site_hosts_list
+  host_parts = []
+  foreach part : entry.strip().to_lower().split('.')
+    if part != ''
+      host_parts += [part]
+    endif
+  endforeach
+  candidate = '.'.join(host_parts)
+  if candidate != '' and (start_host == candidate or start_host.endswith('.' + candidate))
+    start_host_covered = true
+  endif
+endforeach
+if start_host == '' or not start_host_covered
+  error('Site config @0@: start_url host "@1@" is not covered by any "host" entry'.format(site_path, start_host))
+endif
+
 app_id_parts = app_id.split('.')
 app_exec = app_id_parts[app_id_parts.length() - 1]
 app_id_path = '/'.join(app_id_parts)
@@ -71,11 +129,15 @@ if site_icon_symbolic != '' and not fs.is_absolute(site_icon_symbolic)
 endif
 data_dir_root = site.get('data_dir', '')
 cache_dir_root = site.get('cache_dir', '')
-ephemeral = site.get('ephemeral', 'false') == 'true'
+ephemeral_raw = site.get('ephemeral', 'false').strip().to_lower()
+if ephemeral_raw != 'true' and ephemeral_raw != 'false'
+  error('Site config @0@: "ephemeral" must be "true" or "false", not "@1@"'.format(site_path, site.get('ephemeral')))
+endif
+ephemeral = ephemeral_raw == 'true'
 
 config = configuration_data()
 config.set_quoted('PACKAGE_VERSION', meson.project_version ())
-config.set_quoted('GETTEXT_PACKAGE', meson.project_name())
+config.set_quoted('GETTEXT_PACKAGE', app_id)
 config.set_quoted('LOCALEDIR', get_option('prefix') / get_option('localedir'))
 config.set_quoted('APP_ID', app_id)
 config.set_quoted('APP_NAME', app_name)
@@ -91,7 +153,7 @@ config_h = configure_file(output: 'config.h', configuration: config)
 config_dep = valac.find_library ('config', dirs: srcdir)
 config_inc = include_directories('.')
 
-add_project_arguments('-DGETTEXT_PACKAGE="' + meson.project_name () + '"', language: 'c')
+add_project_arguments('-DGETTEXT_PACKAGE="' + app_id + '"', language: 'c')
 
 
 subdir('data')
