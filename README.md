@@ -2,8 +2,7 @@
 
 Generic GTK 4 + WebKitGTK 6.0 wrapper that builds a native desktop app for any
 website from a small config file. The default config (`sites/whatsapp.conf`)
-builds WhatsApp Web (formerly WhatsV); `sites/other.conf` builds a second app
-from the same sources.
+builds WhatsApp Web (formerly WhatsV); other sites build from their own config.
 
 ## Features
 - Single instance (D-Bus), multi-window, per-profile isolated sessions
@@ -69,14 +68,6 @@ meson test -C build
 meson install -C build --destdir "$PWD/pkgdir"
 ```
 
-Another bundled config:
-
-```sh
-meson setup build-other -Dsite=sites/other.conf
-meson compile -C build-other
-meson test -C build-other
-```
-
 External config:
 
 ```sh
@@ -90,7 +81,6 @@ Run (`whatsv` is the last `app_id` segment unless `exec_name` is set):
 ./build/src/whatsv
 ./build/src/whatsv --profile work   # isolated session
 ./build/src/whatsv --help
-./build-other/src/other
 ```
 
 Sessions live in `<data_dir or XDG_DATA_HOME>/<app_id>/profiles/<name>` and

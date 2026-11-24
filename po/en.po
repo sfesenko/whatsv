@@ -1,10 +1,10 @@
-# Translation for whatsv
+# Translation for WebApp
 # Copyright (C) 2025 Sergii Fesenko
-# This file is distributed under the same license as the whatsv package.
+# This file is distributed under the same license as the WebApp package.
 msgid ""
 msgstr ""
-"Project-Id-Version: whatsv 0.1.0\n"
-"Report-Msgid-Bugs-To: https://github.com/sfesenko/whatsv/issues\n"
+"Project-Id-Version: WebApp 0.2.0\n"
+"Report-Msgid-Bugs-To: https://github.com/sfesenko/webapp/issues\n"
 "POT-Creation-Date: 2025-08-24\n"
 "MIME-Version: 1.0\n"
 "Content-Type: text/plain; charset=UTF-8\n"

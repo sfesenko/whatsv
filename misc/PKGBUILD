@@ -20,10 +20,8 @@ pkgver() {
 
 build() {
   cd "${srcdir}"
-  # A package for another site is a copy of this file with only pkgname and
-  # the -Dsite path changed, for example:
-  #   pkgname=webapp-other-git
-  #   meson setup --prefix=/usr build "${srcdir}/${pkgname}" -Dsite="${srcdir}/${pkgname}/sites/other.conf"
+  # For another site, copy this file, change pkgname, and point -Dsite at
+  # that site's config.
   meson setup --prefix=/usr build "${srcdir}/${pkgname}" -Dsite="${srcdir}/${pkgname}/sites/whatsapp.conf"
   meson compile -C build
 }
