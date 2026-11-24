@@ -1,5 +1,5 @@
 option('site',
   type: 'string',
-  value: 'sites/whatsapp.conf',
+  value: 'misc/whatsapp.conf',
   description: 'Site config file, relative to the source root or absolute',
 )

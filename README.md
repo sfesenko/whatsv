@@ -1,7 +1,7 @@
 # WebApp
 
 Generic GTK 4 + WebKitGTK 6.0 wrapper that builds a native desktop app for any
-website from a small config file. The default config (`sites/whatsapp.conf`)
+website from a small config file. The default config (`misc/whatsapp.conf`)
 builds WhatsApp Web (formerly WhatsV); other sites build from their own config.
 
 ## Features
@@ -94,9 +94,10 @@ example LUKS) or an encrypted home directory. `ephemeral=true` writes no
 session data to disk.
 
 ## Packaging
-- `misc/PKGBUILD` builds `webapp-git` with the default WhatsApp config; run
-  `makepkg -s` in `misc/`.
-- For another site, copy it, change `pkgname`, and point `-Dsite` at that
-  config. Installed files derive from `app_id`, so packages install side by
-  side; set distinct `exec_name` values when two `app_id`s share a last
-  segment.
+- `misc/PKGBUILD` builds `webapp-git` from the local checkout with the bundled
+  WhatsApp sample; run `makepkg -s` in `misc/`. Override
+  `WEBAPP_SITE=/path/to/site.conf` or `WEBAPP_SRC=/path/to/checkout` for
+  another build.
+- For a published package, copy it and update `pkgname`/`pkgdesc`/`provides`.
+  Installed files derive from `app_id`, so packages install side by side; set
+  distinct `exec_name` values when two `app_id`s share a last segment.
