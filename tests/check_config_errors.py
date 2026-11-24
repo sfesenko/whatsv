@@ -18,9 +18,19 @@ CASES = (
     ('broken-bool.conf', '"ephemeral" must be "true" or "false"'),
     ('broken-missing-key.conf', 'missing required key "app_name"'),
     ('broken-empty-host.conf', 'has an empty "host" value'),
+    ('broken-no-host.conf', 'must define at least one "host" key'),
     ('broken-app-id.conf', 'has an empty segment'),
+    ('broken-app-id-single.conf', 'must have at least two dot-separated segments'),
+    ('broken-app-id-start.conf', 'segment "1example" in "com.1example" must start with an ASCII letter'),
+    ('broken-app-id-char.conf', 'contains invalid character "!" (allowed: A-Z, a-z, 0-9, "_", "-")'),
+    ('broken-start-url-uncovered.conf', 'is not covered by any "host" entry'),
     ('broken-missing-icon.conf', 'missing required key "icon"'),
     ('broken-missing-icon-file.conf', '"icon" file'),
+    ('broken-missing-icon-symbolic-file.conf', '"icon_symbolic" file'),
+    ('broken-empty-app-name.conf', 'has an empty required key "app_name"'),
+    ('broken-empty-start-url.conf', 'has an empty required key "start_url"'),
+    ('broken-exec-name.conf', '"exec_name" value "bad/name" contains invalid character'),
+    ('broken-persist-cookies.conf', '"persist_cookies" must be "true" or "false"'),
 )
 
 
@@ -31,6 +41,18 @@ def run_setup(meson, source_root, site_conf, build_dir):
         text=True,
         timeout=600,
     )
+
+
+def run_compile(meson, build_dir):
+    result = subprocess.run(
+        [meson, 'compile', '-C', build_dir],
+        capture_output=True,
+        text=True,
+        timeout=900,
+    )
+    if result.returncode != 0:
+        raise RuntimeError(result.stdout + result.stderr)
+    return result
 
 
 def main(argv):
@@ -67,21 +89,27 @@ def main(argv):
                 'ephemeral-site.conf: meson setup failed:\n'
                 + result.stdout + result.stderr)
         else:
-            with open(os.path.join(ephemeral_build, 'config.h'),
-                      encoding='utf-8') as config_h:
-                defines = config_h.read()
-            expected_defines = {
-                '#define EPHEMERAL TRUE': 'EPHEMERAL TRUE',
-                '#define PERSIST_COOKIES FALSE': 'PERSIST_COOKIES FALSE',
-                '#define APP_EXEC "ephemeralclient"': 'APP_EXEC "ephemeralclient"',
-            }
-            for needle, label in expected_defines.items():
-                if needle not in defines:
+            compiled = True
+            try:
+                run_compile(meson, ephemeral_build)
+            except RuntimeError as error:
+                failures.append(
+                    f'ephemeral-site.conf: compile failed:\n{error}')
+                compiled = False
+            if compiled:
+                checked = subprocess.run(
+                    [sys.executable,
+                     os.path.join(source_root, 'tests', 'check_site_config.py'),
+                     os.path.join(ephemeral_build, 'config.h'),
+                     ephemeral_conf, ephemeral_build],
+                    capture_output=True, text=True, timeout=60)
+                if checked.returncode != 0:
                     failures.append(
-                        f'ephemeral-site.conf: missing {label} in config.h')
-            print('ephemeral-site.conf: configured with '
-                  'EPHEMERAL TRUE, PERSIST_COOKIES FALSE, '
-                  'APP_EXEC "ephemeralclient"')
+                        'ephemeral-site.conf: generated files/constants are wrong:\n'
+                        + checked.stdout + checked.stderr)
+                else:
+                    print('ephemeral-site.conf: constants and generated files '
+                          'are correct')
     finally:
         shutil.rmtree(work, ignore_errors=True)
 

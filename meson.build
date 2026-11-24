@@ -87,14 +87,14 @@ foreach part : app_id_parts
     error('Site config @0@: "app_id" value "@1@" has an empty segment'.format(site_path, app_id))
   endif
   if not id_first_chars.contains(part.substring(0, 1))
-    error('Site config @0@: "app_id" segment "@1@" in "@2@" must start with an ASCII letter'.format(part, app_id))
+    error('Site config @0@: "app_id" segment "@1@" in "@2@" must start with an ASCII letter'.format(site_path, part, app_id))
   endif
   id_remainder = part.substring(1)
   foreach id_char : id_other_chars
     id_remainder = id_remainder.replace(id_char, '')
   endforeach
   if id_remainder != ''
-    error('Site config @0@: "app_id" segment "@1@" in "@2@" contains invalid character "@3@" (allowed: A-Z, a-z, 0-9, "_", "-")'.format(part, app_id, id_remainder.substring(0, 1)))
+    error('Site config @0@: "app_id" segment "@1@" in "@2@" contains invalid character "@3@" (allowed: A-Z, a-z, 0-9, "_", "-")'.format(site_path, part, app_id, id_remainder.substring(0, 1)))
   endif
 endforeach
 

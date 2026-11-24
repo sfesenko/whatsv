@@ -86,19 +86,24 @@ def main(argv):
                  '--prefix=/usr', '-Dsite=' + site_conf], timeout=600)
             run([meson, 'compile', '-C', build_dir], timeout=900)
             run([sys.executable, config_checker,
-                 os.path.join(build_dir, 'config.h'), site_conf], timeout=60)
+                 os.path.join(build_dir, 'config.h'), site_conf, build_dir],
+                timeout=60)
 
             destdir = os.path.join(work, f'dest-{index}')
             env = dict(os.environ, DESTDIR=destdir)
             run([meson, 'install', '-C', build_dir, '--no-rebuild'],
                 env=env, timeout=600)
             installed = installed_files(destdir)
-            missing = sorted(expected_files(keys) - installed)
-            if missing:
-                print(f'{fixture} install is missing expected files:',
+            expected = expected_files(keys)
+            missing = sorted(expected - installed)
+            extra = sorted(installed - expected)
+            if missing or extra:
+                print(f'{fixture} install differs from expected files:',
                       file=sys.stderr)
                 for path in missing:
-                    print('  ' + path, file=sys.stderr)
+                    print('  missing: ' + path, file=sys.stderr)
+                for path in extra:
+                    print('  extra: ' + path, file=sys.stderr)
                 return 1
             results.append((fixture, keys['app_id'], exec_name(keys), installed))
 

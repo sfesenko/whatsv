@@ -1,6 +1,7 @@
 using WebApp.Utils;
 
 const string TEST_HOSTS = "example.com,api.example.com";
+const string TEST_APP_ID = "com.example.app";
 
 void test_is_allowed_host () {
     // exact and subdomain matches, case-insensitive
@@ -58,7 +59,7 @@ void test_sanitize_profile_name () {
     assert (sanitize_profile_name ("a/b\\c") == "a_b_c");
     assert (sanitize_profile_name (".hidden") == "hidden");
     // traversal
-    assert (sanitize_profile_name ("../etc") == "___etc" || sanitize_profile_name ("../etc") == "__etc" || sanitize_profile_name ("../etc").has_prefix ("_"));
+    assert (sanitize_profile_name ("../etc") == "_etc");
     // long (>64) should be truncated/hashed, still within limit and matches whitelist
     string long = "";
     for (int i = 0; i < 100; i++) long += "a";
@@ -80,33 +81,43 @@ void test_sanitize_profile_name () {
 
 void test_get_dirs_for_profile () {
     string data, cache;
-    get_dirs_for_profile ("work", "com.example.app", "", "", out data, out cache);
-    assert (data.contains ("/com.example.app/profiles/work"));
-    assert (cache.contains ("/com.example.app/profiles/work"));
+    get_dirs_for_profile ("work", TEST_APP_ID, "", "", out data, out cache);
+    assert (data == Path.build_filename (Environment.get_user_data_dir (), TEST_APP_ID, "profiles", "work"));
+    assert (cache == Path.build_filename (Environment.get_user_cache_dir (), TEST_APP_ID, "profiles", "work"));
     // both roots are sensitive: traversal is sanitized in each
-    get_dirs_for_profile ("../etc/passwd", "com.example.app", "", "", out data, out cache);
+    get_dirs_for_profile ("../etc/passwd", TEST_APP_ID, "", "", out data, out cache);
     assert (!data.contains ("../"));
     assert (!data.has_suffix ("/etc/passwd"));
     assert (!cache.contains ("../"));
     assert (!cache.has_suffix ("/etc/passwd"));
-    get_dirs_for_profile ("default", "com.example.app", "", "", out data, out cache);
-    assert (data.contains ("/com.example.app/profiles/default"));
-    assert (cache.contains ("/com.example.app/profiles/default"));
+    get_dirs_for_profile ("default", TEST_APP_ID, "", "", out data, out cache);
+    assert (data == Path.build_filename (Environment.get_user_data_dir (), TEST_APP_ID, "profiles", "default"));
+    assert (cache == Path.build_filename (Environment.get_user_cache_dir (), TEST_APP_ID, "profiles", "default"));
     // empty profile sanitizes to default
-    get_dirs_for_profile ("", "com.example.app", "", "", out data, out cache);
-    assert (data.contains ("/default"));
+    get_dirs_for_profile ("", TEST_APP_ID, "", "", out data, out cache);
+    assert (data == Path.build_filename (Environment.get_user_data_dir (), TEST_APP_ID, "profiles", "default"));
     // explicit roots replace the XDG roots verbatim for both data and cache
-    get_dirs_for_profile ("work", "com.example.app", "/tmp/site-data", "/tmp/site-cache", out data, out cache);
-    assert (data.has_prefix ("/tmp/site-data/"));
-    assert (cache.has_prefix ("/tmp/site-cache/"));
-    assert (data.contains ("/com.example.app/profiles/work"));
-    assert (cache.contains ("/com.example.app/profiles/work"));
+    get_dirs_for_profile ("work", TEST_APP_ID, "/tmp/site-data", "/tmp/site-cache", out data, out cache);
+    assert (data == Path.build_filename ("/tmp/site-data", TEST_APP_ID, "profiles", "work"));
+    assert (cache == Path.build_filename ("/tmp/site-cache", TEST_APP_ID, "profiles", "work"));
+}
+
+void test_config_constants () {
+    // Generated constants must describe a usable configuration: the start URL
+    // is allowed, and profile directories follow the configured app id/roots.
+    assert (is_allowed_host (Config.SITE_START_URL, Config.SITE_HOSTS));
+    string data, cache;
+    get_dirs_for_profile ("work", Config.APP_ID, Config.DATA_DIR_ROOT, Config.CACHE_DIR_ROOT, out data, out cache);
+    assert (data.has_prefix (Config.DATA_DIR_ROOT != "" ? Config.DATA_DIR_ROOT : Environment.get_user_data_dir ()));
+    assert (cache.has_prefix (Config.CACHE_DIR_ROOT != "" ? Config.CACHE_DIR_ROOT : Environment.get_user_cache_dir ()));
+    assert (data.contains ("/" + Config.APP_ID + "/profiles/work"));
+    assert (cache.contains ("/" + Config.APP_ID + "/profiles/work"));
 }
 
 void test_sanitize_download_filename () {
     assert (sanitize_download_filename ("foo.pdf") == "foo.pdf");
     assert (sanitize_download_filename ("a/b/c.pdf") == "c.pdf");
-    assert (sanitize_download_filename ("../.bashrc") == ".bashrc" || sanitize_download_filename ("../.bashrc") == "_bashrc" || sanitize_download_filename ("../.bashrc") == "bashrc");
+    assert (sanitize_download_filename ("../.bashrc") == ".bashrc");
     // basename handling
     assert (sanitize_download_filename ("") == "download");
     assert (sanitize_download_filename (".") == "download");
@@ -152,6 +163,7 @@ int main (string[] args) {
     Test.add_func ("/webapp/decide_navigation", test_decide_navigation);
     Test.add_func ("/webapp/sanitize_profile_name", test_sanitize_profile_name);
     Test.add_func ("/webapp/get_dirs_for_profile", test_get_dirs_for_profile);
+    Test.add_func ("/webapp/config_constants", test_config_constants);
     Test.add_func ("/webapp/sanitize_download_filename", test_sanitize_download_filename);
     Test.add_func ("/webapp/deduplicate_download_path", test_deduplicate_download_path);
     return Test.run ();

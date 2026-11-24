@@ -4,6 +4,7 @@ test_utils_sources = files(
 )
 
 test_deps = [
+  config_dep,
   dependency('glib-2.0'),
   dependency('gio-2.0'),
 ]
@@ -11,6 +12,7 @@ test_deps = [
 test_utils = executable('test_utils',
   test_utils_sources,
   dependencies: test_deps,
+  include_directories: config_inc,
   install: false,
 )
 
@@ -26,6 +28,7 @@ test('site-config', python3,
     files('check_site_config.py'),
     config_h,
     site_path,
+    meson.global_build_root(),
   ],
 )
 
