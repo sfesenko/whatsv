@@ -4,7 +4,7 @@
   <metadata_license>CC0-1.0</metadata_license>
   <project_license>MIT</project_license>
 
-  <name>@APP_NAME@</name>
+  <name>@APP_NAME_XML@</name>
   <summary>Run a website in its own desktop window</summary>
   <description>
     <p>GTK 4 and WebKitGTK client that wraps a configured website in a native window with persistent sessions, profiles and native hotkeys.</p>
@@ -15,7 +15,7 @@
     <name>Sergii Fesenko</name>
   </developer>
 
-  <url type="homepage">@SITE_START_URL@</url>
+  <url type="homepage">@SITE_START_URL_XML@</url>
 
   <translation type="gettext">@APP_ID@</translation>
   <launchable type="desktop-id">@APP_ID@.desktop</launchable>

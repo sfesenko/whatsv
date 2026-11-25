@@ -41,8 +41,12 @@ build() {
     echo "Site config not found: ${site_path}" >&2
     return 1
   fi
-  meson setup --prefix=/usr "${srcdir}/build" "${_localdir}" -Dsite="${_siteconf}"
+  meson setup --prefix=/usr --buildtype=release "${srcdir}/build" "${_localdir}" -Dsite="${_siteconf}"
   meson compile -C "${srcdir}/build"
+}
+
+check() {
+  meson test -C "${srcdir}/build" --print-errorlogs
 }
 
 package() {

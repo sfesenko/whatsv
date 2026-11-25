@@ -18,8 +18,15 @@ namespace WebApp.Utils {
 
     private string? extract_host_from_string (string uri) {
         var low = uri.strip ().down ();
-        if (!low.has_prefix ("https://")) return null;
-        var rest = low.substring (8);
+        int offset;
+        if (low.has_prefix ("https://")) {
+            offset = 8;
+        } else if (low.has_prefix ("http://")) {
+            offset = 7;
+        } else {
+            return null;
+        }
+        var rest = low.substring (offset);
         int end = rest.length;
         int slash = rest.index_of ("/");
         if (slash >= 0 && slash < end) end = slash;
@@ -54,6 +61,19 @@ namespace WebApp.Utils {
         }
     }
 
+    private bool host_is_single_label (string host) {
+        return !host.contains (".") && !host.contains (":");
+    }
+
+    private bool host_is_ipv4_literal (string host) {
+        if (!host.contains (".")) return false;
+        for (int i = 0; i < host.length; i++) {
+            char c = host[i];
+            if (c != '.' && (c < '0' || c > '9')) return false;
+        }
+        return true;
+    }
+
     public bool is_allowed_host (string uri, string allowed_hosts) {
         var host = extract_host (uri);
         if (host == null) return false;
@@ -63,7 +83,12 @@ namespace WebApp.Utils {
             string entry = comma < 0 ? allowed_hosts.substring (start) : allowed_hosts.substring (start, comma - start);
             var candidate = entry.strip ().down ();
             if (candidate.has_prefix (".")) candidate = candidate.substring (1);
-            if (candidate != "" && (host == candidate || host.has_suffix ("." + candidate))) return true;
+            if (candidate.has_prefix ("[") && candidate.has_suffix ("]")) {
+                candidate = candidate.substring (1, candidate.length - 2);
+            }
+            bool suffix_match = !host_is_single_label (candidate)
+                && !host_is_ipv4_literal (candidate);
+            if (candidate != "" && (host == candidate || (suffix_match && host.has_suffix ("." + candidate)))) return true;
             if (comma < 0) break;
             start = comma + 1;
         }
@@ -80,8 +105,31 @@ namespace WebApp.Utils {
         bool is_http = scheme == "http" || scheme == "https";
         if (is_http && is_allowed_host (uri, allowed_hosts)) return NavigationDisposition.IN_VIEW;
         if (is_benign_scheme (uri)) return NavigationDisposition.IN_VIEW;
+        if ((scheme == "mailto" || scheme == "tel") && (is_link_clicked || is_new_window)) return NavigationDisposition.OPEN_EXTERNAL;
         if (is_http && (is_link_clicked || is_new_window)) return NavigationDisposition.OPEN_EXTERNAL;
         return NavigationDisposition.IGNORE;
+    }
+
+    public enum PermissionDisposition {
+        ALLOW,
+        DENY,
+        PROMPT
+    }
+
+    public PermissionDisposition decide_permission (string request_type, bool site_trusted) {
+        if (!site_trusted) return PermissionDisposition.DENY;
+        switch (request_type) {
+            case "WebKitNotificationPermissionRequest":
+            case "WebKitMediaKeySystemPermissionRequest":
+            case "WebKitDeviceInfoPermissionRequest":
+                return PermissionDisposition.ALLOW;
+            case "WebKitUserMediaPermissionRequest":
+                // Camera, microphone and display capture need an explicit
+                // user decision rather than a silent grant.
+                return PermissionDisposition.PROMPT;
+            default:
+                return PermissionDisposition.DENY;
+        }
     }
 
     public string sanitize_profile_name (string profile) {
@@ -89,13 +137,24 @@ namespace WebApp.Utils {
         if (raw == "" || raw == "." || raw == "..") raw = "default";
         string safe;
         try {
+            var valid_re = new Regex ("^[A-Za-z0-9._-]+$");
+            if (raw.length <= 64 && !raw.has_prefix (".") && valid_re.match (raw)) {
+                // Already a safe name: keep it stable so sanitizing twice does
+                // not change the profile directory.
+                return raw;
+            }
             var re = new Regex ("[^A-Za-z0-9._-]");
             safe = re.replace (raw, -1, 0, "_");
             while (safe.has_prefix (".")) safe = safe.substring (1);
             if (safe == "" || safe == "." || safe == "..") safe = "default";
-            if (safe.length > 64) {
+            bool lossy = safe != raw;
+            if (safe.length > 48) {
+                safe = safe.substring (0, 48);
+                lossy = true;
+            }
+            if (lossy) {
                 var hash = Checksum.compute_for_string (ChecksumType.SHA256, raw);
-                safe = safe.substring (0, 32) + "_" + hash.substring (0, 8);
+                safe += "_" + hash.substring (0, 8);
             }
             var ws_re = new Regex ("^[A-Za-z0-9._-]+$");
             if (!ws_re.match (safe)) {
@@ -126,7 +185,14 @@ namespace WebApp.Utils {
         } catch (Error e) {
             base_name = base_name.replace ("/", "_").replace ("\\", "_");
         }
-        if (base_name.length > 255) base_name = base_name.substring (0, 255);
+        if (base_name.length > 255) {
+            var dot = base_name.last_index_of_char ('.');
+            string ext = "";
+            if (dot > 0 && base_name.length - dot <= 20) ext = base_name.substring (dot);
+            int max_stem = 255 - ext.length;
+            if (max_stem < 1) max_stem = 1;
+            base_name = base_name.substring (0, max_stem) + ext;
+        }
         if (base_name == "" || base_name == "." || base_name == "..") base_name = "download";
         return base_name;
     }
@@ -145,7 +211,11 @@ namespace WebApp.Utils {
             } else {
                 stem = base_name;
             }
-            var candidate = "%s (%d)%s".printf (stem, n, ext);
+            var suffix = " (%d)%s".printf (n, ext);
+            int max_stem = 255 - suffix.length;
+            if (max_stem < 1) max_stem = 1;
+            if (stem.length > max_stem) stem = stem.substring (0, max_stem);
+            var candidate = stem + suffix;
             dest = Path.build_filename (downloads_dir, candidate);
             file = File.new_for_path (dest);
             n++;

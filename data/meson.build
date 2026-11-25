@@ -2,8 +2,10 @@ app_conf = configuration_data()
 app_conf.set('APP_ID', app_id)
 app_conf.set('APP_EXEC', app_exec)
 app_conf.set('APP_NAME', app_name)
+app_conf.set('APP_NAME_XML', app_name_xml)
 app_conf.set('APP_ID_PATH', app_id_path)
 app_conf.set('SITE_START_URL', site_start_url)
+app_conf.set('SITE_START_URL_XML', site_start_url_xml)
 app_conf.set('bindir', get_option('prefix') / get_option('bindir'))
 
 desktop_in = configure_file(

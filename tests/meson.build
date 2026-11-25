@@ -42,6 +42,14 @@ test('config-errors', python3,
   timeout: 600,
 )
 
+test('bump-script', python3,
+  args: [
+    files('check_bump.py'),
+    meson.project_source_root(),
+  ],
+  timeout: 120,
+)
+
 test('disjoint-install', python3,
   args: [
     files('check_disjoint_install.py'),

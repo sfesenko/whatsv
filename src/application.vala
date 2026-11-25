@@ -30,8 +30,14 @@ public class WebApp.Window : Gtk.ApplicationWindow {
     [CCode (cname = "webkit_settings_get_all_features", cheader_filename = "webkit/webkit.h")]
     private static extern void* webkit_settings_get_all_features ();
 
-    [CCode (cname = "webkit_feature_list_find", cheader_filename = "webkit/webkit.h")]
-    private static extern void* webkit_feature_list_find (void* list, string identifier);
+    [CCode (cname = "webkit_feature_list_get_length", cheader_filename = "webkit/webkit.h")]
+    private static extern size_t webkit_feature_list_get_length (void* list);
+
+    [CCode (cname = "webkit_feature_list_get", cheader_filename = "webkit/webkit.h")]
+    private static extern void* webkit_feature_list_get (void* list, size_t index);
+
+    [CCode (cname = "webkit_feature_get_identifier", cheader_filename = "webkit/webkit.h")]
+    private static extern unowned string webkit_feature_get_identifier (void* feature);
 
     [CCode (cname = "webkit_feature_list_unref", cheader_filename = "webkit/webkit.h")]
     private static extern void webkit_feature_list_unref (void* list);
@@ -63,17 +69,6 @@ public class WebApp.Window : Gtk.ApplicationWindow {
         this.set_default_size (sw, sh);
         if (smax) this.maximize ();
 
-        // Resolve help overlay from gresource so win.show-help-overlay works
-        try {
-            var builder = new Gtk.Builder.from_resource ("/com/github/sfesenko/webapp/gtk/help-overlay.ui");
-            var overlay = builder.get_object ("help_overlay") as Gtk.ShortcutsWindow;
-            if (overlay != null) {
-                this.set_help_overlay (overlay);
-            }
-        } catch (Error e) {
-            warning ("Failed to load help overlay: %s", e.message);
-        }
-
         // Persist geometry / zoom on close
         this.close_request.connect (on_close_request);
 
@@ -87,6 +82,7 @@ public class WebApp.Window : Gtk.ApplicationWindow {
             { "go-back", on_go_back },
             { "go-forward", on_go_forward },
             { "close-window", on_close_window },
+            { "show-shortcuts", on_show_shortcuts },
         };
         this.add_action_entries (win_entries, this);
 
@@ -151,13 +147,7 @@ public class WebApp.Window : Gtk.ApplicationWindow {
                 this.title = Config.APP_NAME;
             }
         });
-        view.notify["estimated-load-progress"].connect (() => {
-            // Could hook progress indicator in headerbar later
-        });
         view.load_failed.connect (on_load_failed);
-        view.notify["is-loading"].connect (() => {
-            // placeholder for spinner
-        });
 
         // Restore zoom from GSettings before first load to avoid double paint/reload
         double zlevel = app_settings.get_double ("zoom-level");
@@ -167,29 +157,6 @@ public class WebApp.Window : Gtk.ApplicationWindow {
         view.notify["zoom-level"].connect (() => {
             app_settings.set_double ("zoom-level", view.zoom_level);
         });
-
-        // Downloads: use XDG Downloads folder, sanitized via Utils
-        if (this.network_session != null) {
-            this.network_session.download_started.connect ((dl) => {
-                dl.decide_destination.connect ((suggested) => {
-                    var downloads = Environment.get_user_special_dir (UserDirectory.DOWNLOAD);
-                    if (downloads == null) downloads = Environment.get_home_dir ();
-                    var base_name = WebApp.Utils.sanitize_download_filename (suggested);
-                    var dest = WebApp.Utils.deduplicate_download_path (downloads, base_name);
-                    dl.set_destination (dest);
-                    dl.set_allow_overwrite (false);
-                    return true;
-                });
-                var req_uri = dl.get_request () != null ? dl.get_request ().get_uri () : "(null)";
-                message ("Download started: %s", req_uri);
-                dl.failed.connect ((err) => {
-                    warning ("Download failed: %s", err.message);
-                });
-                dl.finished.connect (() => {
-                    message ("Download finished: %s", dl.get_destination ());
-                });
-            });
-        }
 
         this.set_child (view);
 
@@ -218,8 +185,20 @@ public class WebApp.Window : Gtk.ApplicationWindow {
             warning ("WebKit feature list unavailable; OPFS will be disabled");
             return;
         }
+        size_t length = webkit_feature_list_get_length (list);
         foreach (var identifier in features) {
-            void* feature = webkit_feature_list_find (list, identifier);
+            void* feature = null;
+            for (size_t i = 0; i < length; i++) {
+                void* candidate = webkit_feature_list_get (list, i);
+                if (candidate == null) {
+                    continue;
+                }
+                unowned string candidate_id = webkit_feature_get_identifier (candidate);
+                if (candidate_id != null && candidate_id == identifier) {
+                    feature = candidate;
+                    break;
+                }
+            }
             if (feature == null) {
                 warning ("WebKit feature %s is unavailable; site storage may be limited", identifier);
                 continue;
@@ -230,13 +209,16 @@ public class WebApp.Window : Gtk.ApplicationWindow {
     }
 
     private static WebKit.NetworkSession get_or_create_session (string profile) {
+        var safe_profile = WebApp.Utils.sanitize_profile_name (profile);
         if (Config.EPHEMERAL) {
-            return new WebKit.NetworkSession.ephemeral ();
+            var ephemeral = new WebKit.NetworkSession.ephemeral ();
+            setup_download_handler (ephemeral);
+            return ephemeral;
         }
         if (sessions == null) {
             sessions = new GLib.HashTable<string, WebKit.NetworkSession> (str_hash, str_equal);
         }
-        var existing = sessions.lookup (profile);
+        var existing = sessions.lookup (safe_profile);
         if (existing != null) {
             return existing;
         }
@@ -257,13 +239,45 @@ public class WebApp.Window : Gtk.ApplicationWindow {
                 Path.build_filename (data_dir, "cookies.sqlite"),
                 WebKit.CookiePersistentStorage.SQLITE);
         }
-        // Persist credentials (HSTS etc) and ITP off for messaging
-        session.set_persistent_credential_storage_enabled (true);
+        // Persistent credentials (HSTS etc) follow the same privacy switch as
+        // cookies; otherwise they would survive even when the user opted out.
+        session.set_persistent_credential_storage_enabled (Config.PERSIST_COOKIES);
         // ITP can break single-page apps; disable
         session.set_itp_enabled (false);
 
-        sessions.insert (profile, session);
+        sessions.insert (safe_profile, session);
+        setup_download_handler (session);
         return session;
+    }
+
+    // Attach once per NetworkSession: a window-local handler would be connected
+    // again for every window that reuses the same profile/session.
+    private static void setup_download_handler (WebKit.NetworkSession session) {
+        session.download_started.connect ((dl) => {
+            dl.decide_destination.connect ((suggested) => {
+                var downloads = Environment.get_user_special_dir (UserDirectory.DOWNLOAD);
+                if (downloads == null) downloads = Environment.get_home_dir ();
+                try {
+                    var dir = File.new_for_path (downloads);
+                    if (!dir.query_exists ()) dir.make_directory_with_parents ();
+                } catch (Error e) {
+                    warning ("Failed to create downloads directory %s: %s", downloads, e.message);
+                }
+                var base_name = WebApp.Utils.sanitize_download_filename (suggested);
+                var dest = WebApp.Utils.deduplicate_download_path (downloads, base_name);
+                dl.set_destination (dest);
+                dl.set_allow_overwrite (false);
+                return true;
+            });
+            var req_uri = dl.get_request () != null ? dl.get_request ().get_uri () : "(null)";
+            message ("Download started: %s", req_uri);
+            dl.failed.connect ((err) => {
+                warning ("Download failed: %s", err.message);
+            });
+            dl.finished.connect (() => {
+                message ("Download finished: %s", dl.get_destination ());
+            });
+        });
     }
 
     private static void ensure_dir (string path) {
@@ -330,6 +344,97 @@ public class WebApp.Window : Gtk.ApplicationWindow {
         this.close ();
     }
 
+    private void on_show_shortcuts () {
+        var dialog = new Gtk.Window ();
+        dialog.set_title (_("Keyboard Shortcuts"));
+        dialog.set_transient_for (this);
+        dialog.set_modal (true);
+        dialog.set_destroy_with_parent (true);
+        dialog.set_default_size (480, 560);
+
+        var header = new Gtk.HeaderBar ();
+        dialog.set_titlebar (header);
+
+        var content = new Gtk.Box (Gtk.Orientation.VERTICAL, 18);
+        content.set_margin_top (18);
+        content.set_margin_bottom (18);
+        content.set_margin_start (18);
+        content.set_margin_end (18);
+
+        content.append (create_shortcut_section (
+            _("General"),
+            { _("Show Shortcuts"), _("Quit"), _("Close Window") },
+            { "F1", "<Primary>q", "<Primary>w" }
+        ));
+        content.append (create_shortcut_section (
+            _("Browsing"),
+            { _("Reload"), _("Reload (Bypass Cache)"), _("Go Back"), _("Go Forward") },
+            { "<Primary>r F5", "<Primary><Shift>r", "<Alt>Left <Primary>bracketleft", "<Alt>Right <Primary>bracketright" }
+        ));
+        content.append (create_shortcut_section (
+            _("Zoom"),
+            { _("Zoom In"), _("Zoom Out"), _("Zoom Reset") },
+            { "<Primary>plus <Primary>equal", "<Primary>minus", "<Primary>0" }
+        ));
+
+        var scrolled = new Gtk.ScrolledWindow ();
+        scrolled.set_policy (Gtk.PolicyType.NEVER, Gtk.PolicyType.AUTOMATIC);
+        scrolled.set_child (content);
+        dialog.set_child (scrolled);
+
+        var controller = new Gtk.ShortcutController ();
+        controller.add_shortcut (new Gtk.Shortcut (
+            Gtk.ShortcutTrigger.parse_string ("Escape"),
+            new Gtk.CallbackAction ((widget, args) => {
+                dialog.close ();
+                return true;
+            })
+        ));
+        dialog.add_controller (controller);
+
+        dialog.present ();
+    }
+
+    private Gtk.Widget create_shortcut_section (string title, string[] descriptions, string[] accelerators) {
+        var section = new Gtk.Box (Gtk.Orientation.VERTICAL, 6);
+        var heading = new Gtk.Label (title);
+        heading.set_xalign (0);
+        heading.add_css_class ("heading");
+        section.append (heading);
+        for (int i = 0; i < descriptions.length; i++) {
+            var row = new Gtk.Box (Gtk.Orientation.HORIZONTAL, 12);
+            var description = new Gtk.Label (descriptions[i]);
+            description.set_xalign (0);
+            description.set_hexpand (true);
+            description.set_wrap (true);
+            var shortcut = new Gtk.Label (format_accelerators (accelerators[i]));
+            shortcut.add_css_class ("dim-label");
+            shortcut.set_xalign (1);
+            row.append (description);
+            row.append (shortcut);
+            section.append (row);
+        }
+        return section;
+    }
+
+    private string format_accelerators (string accelerators) {
+        var result = new GLib.StringBuilder ();
+        var display = this.get_display ();
+        bool first = true;
+        foreach (var part in accelerators.split (" ")) {
+            if (part == "") continue;
+            var trigger = Gtk.ShortcutTrigger.parse_string (part);
+            string label = part;
+            if (trigger != null) {
+                label = display != null ? trigger.to_label (display) : trigger.to_string ();
+            }
+            if (!first) result.append (" / ");
+            result.append (label);
+            first = false;
+        }
+        return result.str;
+    }
+
     private bool on_close_request () {
         bool is_max = this.maximized;
         bool is_full = this.fullscreened;
@@ -359,29 +464,87 @@ public class WebApp.Window : Gtk.ApplicationWindow {
             request.deny ();
             return true;
         }
-        if (request is WebKit.NotificationPermissionRequest) {
-            request.allow ();
-            return true;
-        }
-        if (request is WebKit.UserMediaPermissionRequest) {
-            request.allow ();
-            return true;
-        }
-        if (request is WebKit.MediaKeySystemPermissionRequest) {
-            request.allow ();
-            return true;
-        }
+
+        // Storage-access requests are cross-site by definition: both the
+        // top-level page and the domain asking for its cookies must be trusted.
         if (request is WebKit.WebsiteDataAccessPermissionRequest) {
-            request.allow ();
+            var data_request = (WebKit.WebsiteDataAccessPermissionRequest) request;
+            var requesting = data_request.get_requesting_domain ();
+            var current = data_request.get_current_domain ();
+            if (domain_is_allowed (requesting) && domain_is_allowed (current)) {
+                request.allow ();
+            } else {
+                warning ("Denying cross-site data access from %s to %s",
+                         requesting ?? "(null)", current ?? "(null)");
+                request.deny ();
+            }
             return true;
         }
-        if (request is WebKit.DeviceInfoPermissionRequest) {
-            request.allow ();
-            return true;
+
+        switch (WebApp.Utils.decide_permission (request.get_type ().name (), is_site)) {
+            case WebApp.Utils.PermissionDisposition.ALLOW:
+                request.allow ();
+                break;
+            case WebApp.Utils.PermissionDisposition.PROMPT:
+                prompt_user_media (request);
+                break;
+            default:
+                message ("Unhandled permission request: %s -> deny", request.get_type ().name ());
+                request.deny ();
+                break;
         }
-        message ("Unhandled permission request: %s -> deny", request.get_type ().name ());
-        request.deny ();
         return true;
+    }
+
+    private static bool domain_is_allowed (string? domain) {
+        if (domain == null) return false;
+        var value = domain.strip ();
+        if (value == "" || value.contains ("/") || value.contains ("@") || value.contains (":") || value.contains (" ")) return false;
+        return WebApp.Utils.is_allowed_host ("https://" + value + "/", Config.SITE_HOSTS);
+    }
+
+    private void prompt_user_media (WebKit.PermissionRequest request) {
+        var media = request as WebKit.UserMediaPermissionRequest;
+        if (media == null) {
+            request.deny ();
+            return;
+        }
+        var dialog = new Gtk.AlertDialog (_("Allow media access?"));
+        if (WebKit.user_media_permission_is_for_display_device (media)) {
+            dialog.set_message (_("Allow screen sharing?"));
+            dialog.set_detail (_("The site is requesting access to your screen."));
+        } else {
+            bool audio = WebKit.user_media_permission_is_for_audio_device (media);
+            bool video = WebKit.user_media_permission_is_for_video_device (media);
+            if (audio && video) {
+                dialog.set_detail (_("The site is requesting access to your microphone and camera."));
+            } else if (audio) {
+                dialog.set_detail (_("The site is requesting access to your microphone."));
+            } else if (video) {
+                dialog.set_detail (_("The site is requesting access to your camera."));
+            } else {
+                dialog.set_detail (_("The site is requesting access to a media device."));
+            }
+        }
+        dialog.set_modal (true);
+        dialog.set_buttons ({ _("Deny"), _("Allow") });
+        dialog.set_cancel_button (0);
+        dialog.set_default_button (0);
+        dialog.choose.begin (this, null, (obj, res) => {
+            int choice = 0;
+            try {
+                choice = dialog.choose.end (res);
+            } catch (Error e) {
+                warning ("Media permission dialog failed: %s", e.message);
+                request.deny ();
+                return;
+            }
+            if (choice == 1) {
+                request.allow ();
+            } else {
+                request.deny ();
+            }
+        });
     }
 
     private bool on_decide_policy (WebKit.PolicyDecision decision, WebKit.PolicyDecisionType type) {
@@ -443,7 +606,7 @@ public class WebApp.Application : Gtk.Application {
 
         ActionEntry[] action_entries = {
             { "about", this.on_about_action },
-            { "quit", this.quit }
+            { "quit", this.on_quit_action }
         };
         this.add_action_entries (action_entries, this);
 
@@ -459,8 +622,8 @@ public class WebApp.Application : Gtk.Application {
         this.set_accels_for_action ("win.go-back", {"<alt>Left", "<primary>bracketleft"});
         this.set_accels_for_action ("win.go-forward", {"<alt>Right", "<primary>bracketright"});
         this.set_accels_for_action ("win.close-window", {"<primary>w"});
-        // Help overlay: F1 is standard; Ctrl+? (Ctrl+Shift+/) non-conflicting
-        this.set_accels_for_action ("win.show-help-overlay", {"F1", "<primary>question"});
+        // Help window: F1 is standard; Ctrl+? (Ctrl+Shift+/) non-conflicting
+        this.set_accels_for_action ("win.show-shortcuts", {"F1", "<primary>question"});
     }
 
     protected override int handle_local_options (VariantDict options) {
@@ -491,10 +654,16 @@ public class WebApp.Application : Gtk.Application {
     public override void activate () {
         base.activate ();
 
+        // Consume the requested profile: D-Bus/desktop activation has no
+        // command line, so a previous --profile must not leak into it.
+        var requested = this.requested_profile;
+        this.requested_profile = "default";
+        var safe_profile = WebApp.Utils.sanitize_profile_name (requested);
+
         // Search existing window with same profile — present it
         foreach (var w in this.get_windows ()) {
             var win = w as WebApp.Window;
-            if (win != null && win.profile == this.requested_profile) {
+            if (win != null && WebApp.Utils.sanitize_profile_name (win.profile) == safe_profile) {
                 win.present ();
                 return;
             }
@@ -502,27 +671,32 @@ public class WebApp.Application : Gtk.Application {
 
         // If profile requested but active window exists with different profile, create new window (single-process multi-window)
         // If no window exists, create default/new profile window
-        var win = new WebApp.Window (this, this.requested_profile);
+        var win = new WebApp.Window (this, requested);
         win.present ();
     }
 
-    public override void open (File[] files, string hint) {
-        // File opening not supported; just activate
-        this.activate ();
+    private void on_quit_action () {
+        // Close windows first so close-request handlers persist geometry and
+        // zoom; calling quit directly bypasses them.
+        foreach (var window in this.get_windows ()) {
+            window.close ();
+        }
+        this.quit ();
     }
 
     private void on_about_action () {
         string[] authors = { "Sergii Fesenko" };
-        Gtk.show_about_dialog (
-            this.active_window,
-            "program-name", Config.APP_NAME,
-            "logo-icon-name", Config.APP_ID,
-            "authors", authors,
-            "translator-credits", _("translator-credits"),
-            "version", Config.PACKAGE_VERSION,
-            "copyright", "© 2025 Sergii Fesenko",
-            "license-type", Gtk.License.MIT_X11,
-            "comments", _("Simple %s web client").printf (Config.APP_NAME)
-        );
+        var dialog = new Gtk.AboutDialog ();
+        dialog.set_program_name (Config.APP_NAME);
+        dialog.set_logo_icon_name (Config.APP_ID);
+        dialog.set_authors (authors);
+        dialog.set_translator_credits (_("translator-credits"));
+        dialog.set_version (Config.PACKAGE_VERSION);
+        dialog.set_copyright ("© 2025 Sergii Fesenko");
+        dialog.set_license_type (Gtk.License.MIT_X11);
+        dialog.set_comments (_("Simple %s web client").printf (Config.APP_NAME));
+        dialog.set_modal (true);
+        dialog.set_transient_for (this.active_window);
+        dialog.present ();
     }
 }

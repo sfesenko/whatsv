@@ -5,13 +5,13 @@
       <default>1200</default>
       <summary>Window width</summary>
       <description>Default width of the main window</description>
-      <range min="600" max="4096"/>
+      <range min="600" max="16384"/>
     </key>
     <key name="window-height" type="i">
       <default>800</default>
       <summary>Window height</summary>
       <description>Default height of the main window</description>
-      <range min="400" max="4096"/>
+      <range min="400" max="16384"/>
     </key>
     <key name="window-maximized" type="b">
       <default>false</default>

@@ -7,6 +7,7 @@ hardcoded here. Each build's generated constants are also checked against its
 config.
 """
 
+import json
 import os
 import shutil
 import subprocess
@@ -27,6 +28,25 @@ def run(command, **kwargs):
     return result
 
 
+def install_dirs(build_dir):
+    options_path = os.path.join(build_dir, 'meson-info',
+                                'intro-buildoptions.json')
+    with open(options_path, encoding='utf-8') as options_file:
+        options = {item['name']: item['value']
+                   for item in json.load(options_file)}
+    prefix = options.get('prefix', '/usr')
+
+    def dest_path(value):
+        path = value if os.path.isabs(value) else os.path.join(prefix, value)
+        return path.lstrip('/')
+
+    return {
+        'bindir': dest_path(options.get('bindir', 'bin')),
+        'datadir': dest_path(options.get('datadir', 'share')),
+        'localedir': dest_path(options.get('localedir', 'share/locale')),
+    }
+
+
 def parse_config(path):
     keys = {}
     with open(path, encoding='utf-8') as config:
@@ -45,18 +65,30 @@ def exec_name(keys):
     return keys.get('exec_name', '').strip() or app_id.rsplit('.', 1)[-1]
 
 
-def expected_files(keys):
+def expected_files(keys, dirs):
     app_id = keys['app_id']
+    bindir = dirs['bindir']
+    datadir = dirs['datadir']
     return {
-        f'usr/bin/{exec_name(keys)}',
-        f'usr/share/applications/{app_id}.desktop',
-        f'usr/share/glib-2.0/schemas/{app_id}.gschema.xml',
-        f'usr/share/dbus-1/services/{app_id}.service',
-        f'usr/share/metainfo/{app_id}.metainfo.xml',
-        f'usr/share/icons/hicolor/scalable/apps/{app_id}.svg',
-        f'usr/share/icons/hicolor/symbolic/apps/{app_id}-symbolic.svg',
-        f'usr/share/locale/en/LC_MESSAGES/{app_id}.mo',
+        f'{bindir}/{exec_name(keys)}',
+        f'{datadir}/applications/{app_id}.desktop',
+        f'{datadir}/glib-2.0/schemas/{app_id}.gschema.xml',
+        f'{datadir}/dbus-1/services/{app_id}.service',
+        f'{datadir}/metainfo/{app_id}.metainfo.xml',
+        f'{datadir}/icons/hicolor/scalable/apps/{app_id}.svg',
+        f'{datadir}/icons/hicolor/symbolic/apps/{app_id}-symbolic.svg',
+        f'{datadir}/licenses/{app_id}/COPYING',
     }
+
+
+def is_app_locale_file(path, app_id, localedir):
+    prefix = localedir.rstrip('/') + '/'
+    if not path.startswith(prefix):
+        return False
+    parts = path[len(prefix):].split('/')
+    return (len(parts) == 3
+            and parts[1] == 'LC_MESSAGES'
+            and parts[2] == app_id + '.mo')
 
 
 def installed_files(destdir):
@@ -85,6 +117,7 @@ def main(argv):
             run([meson, 'setup', build_dir, source_root,
                  '--prefix=/usr', '-Dsite=' + site_conf], timeout=600)
             run([meson, 'compile', '-C', build_dir], timeout=900)
+            dirs = install_dirs(build_dir)
             run([sys.executable, config_checker,
                  os.path.join(build_dir, 'config.h'), site_conf, build_dir],
                 timeout=60)
@@ -94,9 +127,14 @@ def main(argv):
             run([meson, 'install', '-C', build_dir, '--no-rebuild'],
                 env=env, timeout=600)
             installed = installed_files(destdir)
-            expected = expected_files(keys)
+            expected = expected_files(keys, dirs)
             missing = sorted(expected - installed)
-            extra = sorted(installed - expected)
+            extra = sorted(path for path in installed - expected
+                           if not is_app_locale_file(path, keys['app_id'], dirs['localedir']))
+            if not any(is_app_locale_file(path, keys['app_id'], dirs['localedir'])
+                       for path in installed):
+                missing.append('usr/share/locale/*/LC_MESSAGES/'
+                               + keys['app_id'] + '.mo')
             if missing or extra:
                 print(f'{fixture} install differs from expected files:',
                       file=sys.stderr)

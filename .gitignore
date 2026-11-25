@@ -6,6 +6,5 @@ build/
 *.mo
 *.pkg.tar.*
 *.pkg.tar.zst
-misc/webapp-git/
 misc/pkg/
 misc/src/

@@ -16,6 +16,41 @@ DEFINE_RE = re.compile(r'^#define\s+(\w+)\s+(.*?)\s*$')
 REQUIRED_KEYS = ('app_id', 'app_name', 'start_url', 'icon', 'icon_symbolic')
 
 
+def unescape_c_string(value):
+    """Decode the escapes Meson/GLib emit for quoted config.h strings."""
+    out = []
+    i = 0
+    mapping = {
+        'n': '\n', 't': '\t', 'r': '\r', 'a': '\a', 'b': '\b',
+        'f': '\f', 'v': '\v', '"': '"', '\\': '\\', "'": "'",
+    }
+    while i < len(value):
+        ch = value[i]
+        if ch == '\\' and i + 1 < len(value):
+            nxt = value[i + 1]
+            if nxt in mapping:
+                out.append(mapping[nxt])
+                i += 2
+                continue
+            if nxt == 'x' and i + 3 < len(value):
+                try:
+                    out.append(chr(int(value[i + 2:i + 4], 16)))
+                    i += 4
+                    continue
+                except ValueError:
+                    pass
+            if nxt in '01234567':
+                j = i + 1
+                while j < len(value) and j < i + 4 and value[j] in '01234567':
+                    j += 1
+                out.append(chr(int(value[i + 1:j], 8)))
+                i = j
+                continue
+        out.append(ch)
+        i += 1
+    return ''.join(out)
+
+
 def read_defines(path):
     defines = {}
     with open(path, encoding='utf-8') as config_h:
@@ -25,7 +60,7 @@ def read_defines(path):
                 continue
             value = match.group(2)
             if len(value) >= 2 and value[0] == '"' and value[-1] == '"':
-                value = value[1:-1]
+                value = unescape_c_string(value[1:-1])
             defines[match.group(1)] = value
     return defines
 
@@ -71,12 +106,13 @@ def check_desktop(path, keys, hosts, expected_exec):
         'Exec': expected_exec + ' %U',
         'Icon': keys['app_id'],
         'StartupWMClass': keys['app_id'],
-        'DBusActivatable': 'true',
     }
     errors = []
     for key, value in expected.items():
         if values.get(key) != value:
             errors.append(f'{key}: expected {value!r}, got {values.get(key)!r}')
+    if 'DBusActivatable' in values:
+        errors.append('DBusActivatable must be absent so Exec arguments are forwarded')
     return errors
 
 

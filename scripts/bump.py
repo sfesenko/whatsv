@@ -13,6 +13,7 @@ import argparse, re, sys, datetime, pathlib, subprocess
 ROOT = pathlib.Path(__file__).resolve().parents[1]
 MESON = ROOT / "meson.build"
 METAINFO = ROOT / "data/app.metainfo.xml.in"
+PO = ROOT / "po/en.po"
 
 def parse_version(v: str):
     m = re.match(r"^(\d+)\.(\d+)\.(\d+)$", v.strip())
@@ -21,20 +22,14 @@ def parse_version(v: str):
     return tuple(map(int, m.groups()))
 
 def pkgver_from_git():
-    # Mirrors misc/PKGBUILD pkgver()
+    # Mirrors misc/PKGBUILD pkgver(): the last commit date with dots.
     try:
-        out = subprocess.check_output(["git", "describe", "--long", "--tags"], stderr=subprocess.DEVNULL, text=True).strip()
-        # v0.1.0-5-gabc123 -> 0.1.0.r5.gabc123
-        out = re.sub(r"^v", "", out)
-        out = re.sub(r"([^-]*-g)", r"r\1", out)
-        out = out.replace("-", ".")
-        return out
+        out = subprocess.check_output(
+            ["git", "-C", str(ROOT), "log", "-1", "--format=%cs"],
+            stderr=subprocess.DEVNULL, text=True).strip()
+        return out.replace("-", ".")
     except Exception:
-        try:
-            out = subprocess.check_output(["git", "log", "-1", "--format=%cs"], text=True).strip()
-            return out.replace("-", ".")
-        except Exception:
-            return "unknown"
+        return "unknown"
 
 def bump_version(cur: str, args):
     if args.version:
@@ -80,6 +75,16 @@ def update_metainfo(old: str, new: str):
     METAINFO.write_text(txt)
     print(f"metainfo: added <release {new} {date}>")
 
+def update_po(old: str, new: str):
+    if not PO.exists():
+        return
+    txt = PO.read_text()
+    needle = f"Project-Id-Version: WebApp {old}\\n"
+    if needle not in txt:
+        return
+    PO.write_text(txt.replace(needle, f"Project-Id-Version: WebApp {new}\\n"))
+    print(f"po/en.po: Project-Id-Version {old} -> {new}")
+
 def main():
     ap = argparse.ArgumentParser()
     g = ap.add_mutually_exclusive_group()
@@ -111,11 +116,15 @@ def main():
     parse_version(new)
     update_meson(cur, new)
     update_metainfo(cur, new)
+    update_po(cur, new)
     print(f"bumped {cur} -> {new}")
-    print(f"next: git add meson.build data/app.metainfo.xml.in && git commit -m \"release: v{new}\" && git tag v{new}")
+    print(f"next: git add meson.build data/app.metainfo.xml.in po/en.po && git commit -m \"release: v{new}\" && git tag v{new}")
     if args.tag:
-        subprocess.run(["git", "add", str(MESON), str(METAINFO)], check=True)
-        subprocess.run(["git", "commit", "-m", f"release: v{new}"], check=True)
+        paths = [str(MESON), str(METAINFO)]
+        if PO.exists():
+            paths.append(str(PO))
+        # --only keeps unrelated staged changes out of the release commit.
+        subprocess.run(["git", "commit", "--only", "-m", f"release: v{new}", "--", *paths], check=True)
         subprocess.run(["git", "tag", f"v{new}"], check=True)
         print(f"tagged v{new}")
         if args.push:
